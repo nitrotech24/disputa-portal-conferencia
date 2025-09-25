@@ -1,6 +1,6 @@
 """
 main.py
-Ponto de entrada para consultas.
+Ponto de entrada para testar consulta de disputas.
 """
 
 import sys
@@ -16,20 +16,20 @@ logging.basicConfig(
 
 def main():
     if len(sys.argv) < 2:
-        print("Uso: python -m api_hapag.main <dispute_id>")
-        return
+        logging.error("Uso: python -m api_hapag.main <dispute_id>")
+        sys.exit(1)
 
     try:
         dispute_id = int(sys.argv[1])
     except ValueError:
-        logging.error("O ID da disputa deve ser numérico")
-        return
+        logging.error("O ID da disputa deve ser numérico.")
+        sys.exit(1)
 
     result = consultar_disputa(dispute_id)
     if result:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
-        logging.error("Consulta falhou")
+        logging.error("Consulta falhou.")
 
 
 if __name__ == "__main__":
