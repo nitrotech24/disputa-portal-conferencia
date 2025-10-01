@@ -1,6 +1,3 @@
-@"
-
-
 """
 API Maersk - Sistema de Gestão de Disputas
 Ponto de entrada principal da aplicação
@@ -9,89 +6,105 @@ import sys
 from services.token_service import TokenService
 from services.auth_service import AuthService
 from services.dispute_service import DisputeService
-from services.dispute_sync_service import DisputeSyncService
+from services.dispute_sync_service_parallel import DisputeSyncServiceParallel
 from repos.invoice_repository import InvoiceRepository
 from repos.disputa_repository import DisputaRepository
+from config.settings import CUSTOMER_CODE_MAPPING
 from utils.logger import setup_logger
+import time
 
 logger = setup_logger(__name__)
 
 
-def exibir_menu():
-    print("=" * 80)
-    print("API MAERSK - GESTÃO DE DISPUTAS")
-    print("=" * 80)
-    print()
-    print("1 - Sincronizar disputas de um cliente")
-    print("2 - Sincronizar todos os clientes")
-    print("3 - Renovar tokens")
-    print("4 - Importar invoices faltantes")
-    print("5 - Atualizar status de uma disputa")
-    print("0 - Sair")
-    print("=" * 80)
+def importar_invoices_faltantes(customer_code: str, dispute_service: DisputeService, invoice_repo: InvoiceRepository):
+    """
+    Identifica e importa invoices que têm disputa mas não estão no banco.
+    """
+    from scripts.import_missing_invoices import get_missing_invoices_from_disputes, fetch_and_insert_missing_invoices
+
+    logger.info(f"[1/2] Verificando invoices faltantes para {customer_code}...")
+    missing_invoices = get_missing_invoices_from_disputes(customer_code)
+
+    if missing_invoices:
+        logger.info(f"Encontradas {len(missing_invoices)} invoices faltantes")
+        stats = fetch_and_insert_missing_invoices(customer_code, missing_invoices)
+        return stats.get('inseridas_banco', 0)
+    else:
+        logger.info("Nenhuma invoice faltante")
+        return 0
 
 
 def main():
+    print("=" * 80)
+    print("EXECUÇÃO AUTOMÁTICA COMPLETA - API MAERSK")
+    print("=" * 80)
+    print("\nEste processo irá:")
+    print("1. Importar invoices com disputa que não estão no banco")
+    print("2. Sincronizar todas as disputas")
+    print("=" * 80)
+
+    # Inicializar serviços
+    logger.info("Inicializando serviços...")
     token_service = TokenService()
     auth_service = AuthService(token_service)
     dispute_service = DisputeService(token_service, auth_service)
     invoice_repo = InvoiceRepository()
     disputa_repo = DisputaRepository()
-    sync_service = DisputeSyncService(dispute_service, invoice_repo, disputa_repo)
+    sync_service = DisputeSyncServiceParallel(
+        dispute_service,
+        invoice_repo,
+        disputa_repo,
+        max_workers=3
+    )
 
-    while True:
-        exibir_menu()
-        opcao = input("\nEscolha uma opção: ").strip()
+    # Processar todos os clientes
+    clientes = list(CUSTOMER_CODE_MAPPING.keys())
+    total_disputas = 0
+    total_invoices_importadas = 0
 
-        if opcao == "1":
-            customer_code = input("Código do cliente: ").strip()
-            limite = input("Limite de invoices (Enter para 1000): ").strip()
-            limite = int(limite) if limite else 1000
+    start_time = time.time()
 
-            logger.info(f"Iniciando sincronização para {customer_code}")
-            stats = sync_service.sync_disputes(customer_code, limit=limite)
+    for idx, customer_code in enumerate(clientes, 1):
+        print(f"\n{'=' * 80}")
+        print(f"CLIENTE {idx}/{len(clientes)}: {customer_code}")
+        print(f"{'=' * 80}")
 
-            print()
-            print("Resultado:")
-            print(f"  Total processadas: {stats.get('total_invoices', 0)}")
-            print(f"  Com disputa: {stats.get('com_disputa', 0)}")
-            print(f"  Disputas salvas: {stats.get('disputas_salvas', 0)}")
+        try:
+            # Passo 1: Importar invoices faltantes
+            invoices_importadas = importar_invoices_faltantes(customer_code, dispute_service, invoice_repo)
+            total_invoices_importadas += invoices_importadas
 
-        elif opcao == "2":
-            print("Importando módulo...")
-            from scripts.sync_all_customers import sync_all_customers
-            sync_all_customers()
+            if invoices_importadas > 0:
+                logger.info(f"✅ {invoices_importadas} invoices importadas")
 
-        elif opcao == "3":
-            print("Renovando tokens...")
-            auth_service.refresh_all_tokens()
+            # Passo 2: Sincronizar disputas
+            logger.info(f"[2/2] Sincronizando disputas...")
+            stats = sync_service.sync_disputes_parallel(customer_code, limit=10000)
 
-        elif opcao == "4":
-            print("Importando módulo...")
-            from scripts.import_missing_invoices import main as import_main
-            import_main()
+            if "erro" not in stats:
+                total_disputas += stats.get("disputas_salvas", 0)
 
-        elif opcao == "5":
-            customer_code = input("Código do cliente: ").strip()
-            dispute_id = input("ID da disputa: ").strip()
+                print(f"\nResultado:")
+                print(f"  Invoices importadas: {invoices_importadas}")
+                print(f"  Total invoices: {stats.get('total_invoices', 0)}")
+                print(f"  Com disputa: {stats.get('com_disputa', 0)}")
+                print(f"  Disputas salvas: {stats.get('disputas_salvas', 0)}")
 
-            resultado = sync_service.update_dispute_status(dispute_id, customer_code)
+        except Exception as e:
+            logger.error(f"Erro ao processar {customer_code}: {e}")
+            continue
 
-            if resultado.get('success'):
-                print(f"\nDisputa {dispute_id} atualizada com sucesso!")
-                print(f"  Status: {resultado.get('status')}")
-                print(f"  Invoice: {resultado.get('invoice_number')}")
-            else:
-                print(f"\nErro: {resultado.get('error')}")
+    elapsed = time.time() - start_time
 
-        elif opcao == "0":
-            print("\nEncerrando...")
-            sys.exit(0)
-
-        else:
-            print("\nOpção inválida!")
-
-        input("\nPressione Enter para continuar...")
+    # Resumo final
+    print(f"\n{'=' * 80}")
+    print("EXECUÇÃO CONCLUÍDA")
+    print(f"{'=' * 80}")
+    print(f"Total de clientes processados: {len(clientes)}")
+    print(f"Total de invoices importadas: {total_invoices_importadas}")
+    print(f"Total de disputas sincronizadas: {total_disputas}")
+    print(f"Tempo total: {elapsed:.1f} segundos")
+    print(f"{'=' * 80}")
 
 
 if __name__ == "__main__":
@@ -103,4 +116,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Erro fatal: {e}")
         sys.exit(1)
-"@ | Out-File -FilePath main.py -Encoding utf8

@@ -4,6 +4,7 @@ from repos.disputa_repository import DisputaRepository
 from utils.logger import setup_logger
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
+import time
 
 logger = setup_logger(__name__)
 
@@ -14,7 +15,7 @@ class DisputeSyncServiceParallel:
             dispute_service: DisputeService,
             invoice_repo: InvoiceRepository,
             disputa_repo: DisputaRepository,
-            max_workers: int = 10  # 🚀 Número de threads simultâneas
+            max_workers: int = 10
     ):
         self.dispute_service = dispute_service
         self.invoice_repo = invoice_repo
@@ -40,21 +41,79 @@ class DisputeSyncServiceParallel:
             if numero_invoice in dispute_map:
                 dispute = dispute_map[numero_invoice]
                 dispute_id = dispute.get("ohpDisputeId")
-                status = dispute.get("statusDescription", "Unknown")
 
                 logger.info(f"✅ Invoice {numero_invoice} tem disputa {dispute_id} (Cliente: {customer_code})")
 
-                self.disputa_repo.insert_or_update(
-                    invoice_id=invoice_id,
-                    dispute_number=int(dispute_id),
-                    status=status,
-                    customer_code=customer_code  # ✅ ADICIONAR ESTA LINHA
-                )
+                # BUSCAR DETALHES COMPLETOS DA DISPUTA
+                dispute_details = self.dispute_service.get_dispute_details(dispute_id, customer_code)
 
-                result["has_dispute"] = True
-                result["success"] = True
-                result["dispute_id"] = dispute_id
-                result["status"] = status
+                # DELAY PARA NÃO SOBRECARREGAR A API
+                time.sleep(0.5)
+
+                if dispute_details:
+                    # Extrair TODOS os campos disponíveis
+                    status = dispute_details.get("statusDescription", "Unknown")
+                    disputed_amount = dispute_details.get("disputedAmount")
+                    currency = dispute_details.get("currency")
+                    api_created_date = dispute_details.get("createdDate")
+                    api_last_modified = dispute_details.get("lastModifiedDate")
+
+                    # Dispute Type
+                    dispute_type = dispute_details.get("disputeType")
+
+                    # Invoice Due Date
+                    invoice_due_date = dispute_details.get("invoiceDueDate")
+
+                    # Status Code
+                    status_code = dispute_details.get("statusCode")
+
+                    # Reason - pode ser objeto ou string
+                    dispute_reason_obj = dispute_details.get("disputeReason")
+                    if isinstance(dispute_reason_obj, dict):
+                        reason_code = dispute_reason_obj.get("reasonCode")
+                        reason_description = dispute_reason_obj.get("reasonDescription")
+                    elif isinstance(dispute_reason_obj, str):
+                        reason_code = None
+                        reason_description = dispute_reason_obj
+                    else:
+                        reason_code = None
+                        reason_description = None
+
+                    # Agent info
+                    agent_obj = dispute_details.get("agent")
+                    if isinstance(agent_obj, dict):
+                        agent_name = agent_obj.get("name") or agent_obj.get("agentName")
+                        agent_email = agent_obj.get("email") or agent_obj.get("agentEmail")
+                    else:
+                        agent_name = None
+                        agent_email = None
+
+                    # Salvar COM TODOS OS CAMPOS
+                    self.disputa_repo.insert_or_update(
+                        invoice_id=invoice_id,
+                        dispute_number=int(dispute_id),
+                        status=status,
+                        disputed_amount=disputed_amount,
+                        currency=currency,
+                        reason_code=reason_code,
+                        reason_description=reason_description,
+                        dispute_type=dispute_type,
+                        invoice_due_date=invoice_due_date,
+                        agent_name=agent_name,
+                        agent_email=agent_email,
+                        status_code=status_code,
+                        api_created_date=api_created_date,
+                        api_last_modified=api_last_modified,
+                        customer_code=customer_code
+                    )
+
+                    result["has_dispute"] = True
+                    result["success"] = True
+                    result["dispute_id"] = dispute_id
+                    result["status"] = status
+                else:
+                    logger.warning(f"⚠️ Não conseguiu buscar detalhes da disputa {dispute_id}")
+                    result["error"] = "Failed to get dispute details"
             else:
                 logger.info(f"ℹ️  Invoice {numero_invoice} sem disputa no cliente {customer_code}")
                 result["success"] = True
@@ -68,7 +127,6 @@ class DisputeSyncServiceParallel:
     def sync_disputes_parallel(self, customer_code: str, limit: int = 20):
         """
         Sincroniza disputas EM PARALELO.
-        Muito mais rápido! 🚀
         """
         logger.info(f"🚀 Iniciando sincronização PARALELA de disputas para {customer_code}")
         logger.info(f"⚙️  Usando {self.max_workers} threads simultâneas")
@@ -93,7 +151,7 @@ class DisputeSyncServiceParallel:
         logger.info(f"🗺️  Mapa criado com {len(dispute_map)} invoices únicas")
 
         # 3. Buscar invoices MAERSK do banco
-        invoices = self.invoice_repo.fetch_invoices_maersk(limit=limit)
+        invoices = self.invoice_repo.fetch_invoices_by_customer(customer_code, limit=limit)
         logger.info(f"🗄️  Encontradas {len(invoices)} invoices no banco")
 
         if not invoices:
@@ -108,7 +166,7 @@ class DisputeSyncServiceParallel:
             "erros": 0
         }
 
-        # 4. 🚀 PROCESSAR EM PARALELO
+        # 4. PROCESSAR EM PARALELO
         logger.info(f"🚀 Processando {len(invoices)} invoices em paralelo...")
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:

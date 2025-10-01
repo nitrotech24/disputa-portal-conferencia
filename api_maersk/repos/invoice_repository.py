@@ -2,6 +2,7 @@ import mysql.connector
 from typing import List, Dict
 from config.settings import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
 
+
 def _conn():
     return mysql.connector.connect(
         host=DB_HOST,
@@ -10,6 +11,7 @@ def _conn():
         user=DB_USER,
         password=DB_PASSWORD
     )
+
 
 class InvoiceRepository:
     def fetch_invoices_maersk(self, limit: int = 20) -> List[Dict]:
@@ -25,4 +27,20 @@ class InvoiceRepository:
         with _conn() as conn:
             cur = conn.cursor(dictionary=True)
             cur.execute(sql, (limit,))
+            return cur.fetchall()
+
+    def fetch_invoices_by_customer(self, customer_code: str, limit: int = 1000) -> List[Dict]:
+        """
+        Busca invoices de um cliente específico
+        """
+        sql = """
+        SELECT id, numero_invoice, customer_code
+        FROM invoice
+        WHERE armador = 'MAERSK' 
+        AND customer_code = %s
+        LIMIT %s
+        """
+        with _conn() as conn:
+            cur = conn.cursor(dictionary=True)
+            cur.execute(sql, (customer_code, limit))
             return cur.fetchall()
