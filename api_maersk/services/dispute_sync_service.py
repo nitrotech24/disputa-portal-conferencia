@@ -75,7 +75,7 @@ class DisputeSyncService:
                 # Extrair TODOS os dados da API
                 dispute_id = dispute.get("ohpDisputeId")
                 status = dispute.get("statusDescription", "Unknown")
-                dispute_reason = dispute.get("disputeReason")
+                dispute_reason = dispute.get("disputeReason", {})
                 disputed_amount = dispute.get("disputedAmount")
                 currency = dispute.get("currency")
                 api_created_date = dispute.get("createdDate")
@@ -86,16 +86,18 @@ class DisputeSyncService:
                     f"| Status: {status} | Valor: {disputed_amount} {currency}"
                 )
 
-                # Salvar com TODOS os campos
+                # Salvar com TODOS os campos disponíveis
                 self.disputa_repo.insert_or_update(
                     invoice_id=invoice_id,
                     dispute_number=int(dispute_id),
                     status=status,
-                    dispute_reason=dispute_reason,
                     disputed_amount=disputed_amount,
                     currency=currency,
+                    reason_code=dispute_reason.get("reasonCode") if dispute_reason else None,
+                    reason_description=dispute_reason.get("reasonDescription") if dispute_reason else None,
                     api_created_date=api_created_date,
-                    api_last_modified=api_last_modified
+                    api_last_modified=api_last_modified,
+                    customer_code=customer_code
                 )
 
                 stats["com_disputa"] += 1
@@ -147,7 +149,7 @@ class DisputeSyncService:
         # Extrair TODOS os dados relevantes
         invoice_number = dispute_data.get("invoiceNumber")
         status = dispute_data.get("statusDescription", "Unknown")
-        dispute_reason = dispute_data.get("disputeReason")
+        dispute_reason = dispute_data.get("disputeReason", {})
         disputed_amount = dispute_data.get("disputedAmount")
         currency = dispute_data.get("currency")
         api_created_date = dispute_data.get("createdDate")
@@ -180,21 +182,22 @@ class DisputeSyncService:
             invoice_id=invoice_id,
             dispute_number=int(dispute_id),
             status=status,
-            dispute_reason=dispute_reason,
             disputed_amount=disputed_amount,
             currency=currency,
+            reason_code=dispute_reason.get("reasonCode") if dispute_reason else None,
+            reason_description=dispute_reason.get("reasonDescription") if dispute_reason else None,
             api_created_date=api_created_date,
-            api_last_modified=api_last_modified
+            api_last_modified=api_last_modified,
+            customer_code=customer_code
         )
 
-        logger.info(f"✅ Disputa {dispute_id} atualizada com sucesso")
+        logger.info(f"Disputa {dispute_id} atualizada com sucesso")
 
         return {
             "success": True,
             "dispute_id": dispute_id,
             "invoice_number": invoice_number,
             "status": status,
-            "dispute_reason": dispute_reason,
             "disputed_amount": disputed_amount,
             "currency": currency,
             "invoice_id": invoice_id
