@@ -22,7 +22,7 @@ def get_invoice_by_id(invoice_id: int):
     """
     Busca uma invoice pelo ID no banco.
     """
-    from api_hapag.db import get_connection
+    from api_hapag.db import get_conn
     conn = get_connection()
     cur = conn.cursor(dictionary=True)
 

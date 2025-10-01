@@ -4,10 +4,10 @@ Atualiza disputas de uma invoice específica na API da Hapag.
 """
 
 import logging
-from api_hapag.token_utils import get_valid_token
-from api_hapag.consulta_invoice import consultar_invoice
-from api_hapag.repos.disputa_repo import upsert_disputa
-from api_hapag.repos.invoice_repo import get_invoice_by_id
+from api_hapag.services.token_service import get_valid_token
+from api_hapag.services.dispute_service import consultar_invoice
+from api_hapag.repos.disputa_repository import upsert_disputa
+from api_hapag.repos.invoice_repository import get_invoice_by_id
 
 logging.basicConfig(
     level=logging.INFO,

@@ -4,9 +4,9 @@ Sincroniza invoices do DB com disputas da API Hapag.
 """
 
 import logging
-from api_hapag.repos.invoice_repo import list_invoices
-from api_hapag.repos.disputa_repo import upsert_disputa
-from api_hapag.services.consulta_invoice import consultar_invoice  # <- corrigido
+from api_hapag.repos.invoice_repository import list_invoices
+from api_hapag.repos.disputa_repository import upsert_disputa
+from api_hapag.services.dispute_service import consultar_invoice  # <- corrigido
 
 logging.basicConfig(
     level=logging.INFO,

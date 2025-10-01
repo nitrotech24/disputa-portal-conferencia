@@ -16,7 +16,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
 from dotenv import load_dotenv
-from api_hapag.storage import save_cookies, save_token
+from api_hapag.utils.storage import save_cookies, save_token
 
 # --- CONFIG ---
 START_URL = "https://www.hapag-lloyd.com/solutions/invoice-overview"

@@ -5,8 +5,8 @@ Gerencia o ciclo de vida do XToken.
 
 import requests
 import logging
-from api_hapag.storage import load_token, save_token
-from api_hapag.auth import login_and_get_token  # função que você já tem no auth.py
+from api_hapag.utils.storage import load_token, save_token
+from api_hapag.services.auth_service import login_and_get_token  # função que você já tem no auth.py
 
 logging.basicConfig(
     level=logging.INFO,
