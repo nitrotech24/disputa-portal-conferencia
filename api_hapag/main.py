@@ -1,62 +1,55 @@
 """
 main.py
-Ponto de entrada principal da API Hapag
+Executa o fluxo completo de sincronizacao de disputas
 """
 
 import sys
-import logging
 from pathlib import Path
 
-# Adiciona o diretorio raiz ao path
-sys.path.insert(0, str(Path(__file__).parent))
+# Adiciona o diretorio pai ao path
+parent_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(parent_dir))
 
 from api_hapag.utils.logger import setup_logger
-from api_hapag.services.sync_service import sincronizar_disputas
 from api_hapag.services.token_service import get_valid_token
+from api_hapag.services.sync_service import sincronizar_disputas
 
 logger = setup_logger()
 
 
-def exibir_menu():
-    """Exibe menu de opcoes"""
-    print("\n" + "=" * 60)
-    print("API HAPAG-LLOYD - GESTAO DE DISPUTAS")
-    print("=" * 60)
-    print("\n1. Sincronizar disputas")
-    print("2. Renovar token manualmente")
-    print("3. Testar token atual")
-    print("0. Sair")
-    print("\n" + "=" * 60)
+def main():
+    """
+    Fluxo principal:
+    1. Valida/renova token
+    2. Sincroniza todas as disputas
+    """
+    logger.info("=" * 60)
+    logger.info("INICIANDO SINCRONIZACAO DE DISPUTAS - HAPAG-LLOYD")
+    logger.info("=" * 60)
 
-
-def sincronizar():
-    """Executa sincronizacao de disputas"""
     try:
-        limit = input("\nQuantas invoices deseja sincronizar? (padrao: 10): ").strip()
-        limit = int(limit) if limit else 10
-        
-        logger.info("Iniciando sincronizacao...")
-        sincronizar_disputas(limit=limit)
-        logger.info("Sincronizacao concluida com sucesso")
-        
-    except ValueError:
-        logger.error("Valor invalido. Use apenas numeros.")
+        # Etapa 1: Garantir token valido
+        logger.info("Etapa 1: Validando token...")
+        token = get_valid_token()
+
+        if not token:
+            logger.error("Falha ao obter token valido. Abortando.")
+            sys.exit(1)
+
+        logger.info("Token validado com sucesso")
+
+        # Etapa 2: Sincronizar todas as disputas
+        logger.info("Etapa 2: Sincronizando todas as disputas...")
+        sincronizar_disputas(limit=None)
+
+        logger.info("=" * 60)
+        logger.info("SINCRONIZACAO CONCLUIDA COM SUCESSO")
+        logger.info("=" * 60)
+
     except Exception as e:
-        logger.error(f"Erro na sincronizacao: {e}")
+        logger.error(f"Erro na execucao: {e}")
+        sys.exit(1)
 
 
-def renovar_token():
-    """Renova token via login Selenium"""
-    from api_hapag.services.auth_service import login_and_get_token
-    
-    logger.info("Renovando token via Selenium...")
-    token = login_and_get_token()
-    
-    if token:
-        logger.info("Token renovado com sucesso")
-    else:
-        logger.error("Falha ao renovar token")
-
-
-def testar_token():
-    """Testa se
+if __name__ == "__main__":
+    main()
