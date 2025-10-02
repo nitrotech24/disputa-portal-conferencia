@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import List, Optional
-from api_hapag.db import get_conn
+from api_hapag.config.db import get_conn
 
 @dataclass(frozen=True)
 class Disputa:
