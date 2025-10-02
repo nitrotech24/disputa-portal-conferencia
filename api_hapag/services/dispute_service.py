@@ -7,7 +7,7 @@ Consolidação de consulta_disputa.py, consulta_invoice.py e consulta_status.py
 import logging
 import requests
 from api_hapag.services.token_service import get_valid_token
-from api_hapag.repos.disputa_repository import update_disputa_status
+from api_hapag.repos.dispute_repository import update_disputa_status
 
 logging.basicConfig(
     level=logging.INFO,
