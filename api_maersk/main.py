@@ -12,6 +12,7 @@ from repos.disputa_repository import DisputaRepository
 from config.settings import CUSTOMER_CODE_MAPPING
 from utils.logger import setup_logger
 import time
+from scripts.import_missing_invoices import get_missing_invoices_from_disputes, fetch_and_insert_missing_invoices
 
 logger = setup_logger(__name__)
 
@@ -20,8 +21,6 @@ def importar_invoices_faltantes(customer_code: str, dispute_service: DisputeServ
     """
     Identifica e importa invoices que têm disputa mas não estão no banco.
     """
-    from scripts.import_missing_invoices import get_missing_invoices_from_disputes, fetch_and_insert_missing_invoices
-
     logger.info(f"[1/2] Verificando invoices faltantes para {customer_code}...")
     missing_invoices = get_missing_invoices_from_disputes(customer_code)
 
