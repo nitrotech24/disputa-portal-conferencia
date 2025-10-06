@@ -33,12 +33,16 @@ class AuthService:
         chrome_options = Options()
         chrome_options.add_argument("--start-maximized")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        try:
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=chrome_options
+            )
+            return driver
+        except Exception as e:
+            logger.error(f"Erro Configurar Chrome WebDriver: {e}")
+            raise e
 
-        driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=chrome_options
-        )
-        return driver
 
     def _close_cookie_popup(self, driver: webdriver.Chrome) -> None:
         """Fecha popup de cookies se existir."""
