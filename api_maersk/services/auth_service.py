@@ -9,12 +9,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
-from config.settings import (
+from api_maersk.config.settings import (
     MAERSK_USERNAME, MAERSK_PASSWORD, MAERSK_BASE_URL,
     SELENIUM_TIMEOUT, PAGE_LOAD_WAIT, TOKEN_CHECK_INTERVAL, MAX_TOKEN_CHECKS
 )
-from services.token_service import TokenService
-from utils.logger import setup_logger
+from api_maersk.services.token_service import TokenService
+from api_maersk.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 

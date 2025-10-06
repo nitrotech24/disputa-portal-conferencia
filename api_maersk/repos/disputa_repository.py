@@ -1,6 +1,6 @@
 import mysql.connector
-from config.settings import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-from utils.logger import setup_logger
+from api_maersk.config.settings import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+from api_maersk.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 

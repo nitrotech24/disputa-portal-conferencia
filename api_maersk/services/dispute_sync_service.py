@@ -1,7 +1,7 @@
-from services.dispute_service import DisputeService
-from repos.invoice_repository import InvoiceRepository
-from repos.disputa_repository import DisputaRepository
-from utils.logger import setup_logger
+from api_maersk.services.dispute_service import DisputeService
+from api_maersk.repos.invoice_repository import InvoiceRepository
+from api_maersk.repos.disputa_repository import DisputaRepository
+from api_maersk.utils.logger import setup_logger
 import json
 
 logger = setup_logger(__name__)

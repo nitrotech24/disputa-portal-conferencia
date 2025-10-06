@@ -2,10 +2,10 @@ import requests
 from typing import Dict, List, Optional
 import json
 
-from config.settings import API_BASE_URL, CONSUMER_KEY, CARRIER_CODE
-from services.token_service import TokenService
-from services.auth_service import AuthService
-from utils.logger import setup_logger
+from api_maersk.config.settings import API_BASE_URL, CONSUMER_KEY, CARRIER_CODE
+from api_maersk.services.token_service import TokenService
+from api_maersk.services.auth_service import AuthService
+from api_maersk.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 

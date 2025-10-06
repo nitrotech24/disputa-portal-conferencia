@@ -3,13 +3,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from services.token_service import TokenService
-from services.auth_service import AuthService
-from services.dispute_service import DisputeService
-from services.dispute_sync_service_parallel import DisputeSyncServiceParallel
-from repos.invoice_repository import InvoiceRepository
-from repos.disputa_repository import DisputaRepository
-from config.settings import CUSTOMER_CODE_MAPPING
+from api_maersk.services.token_service import TokenService
+from api_maersk.services.auth_service import AuthService
+from api_maersk.services.dispute_service import DisputeService
+from api_maersk.services.dispute_sync_service_parallel import DisputeSyncServiceParallel
+from api_maersk.repos.invoice_repository import InvoiceRepository
+from api_maersk.repos.disputa_repository import DisputaRepository
+from api_maersk.config.settings import CUSTOMER_CODE_MAPPING
 import time
 
 

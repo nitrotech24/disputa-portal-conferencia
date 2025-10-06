@@ -3,13 +3,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from services.token_service import TokenService
-from services.auth_service import AuthService
-from services.dispute_service import DisputeService
-from repos.invoice_repository import InvoiceRepository
-from utils.logger import setup_logger
+from api_maersk.services.token_service import TokenService
+from api_maersk.services.auth_service import AuthService
+from api_maersk.services.dispute_service import DisputeService
+from api_maersk.repos.invoice_repository import InvoiceRepository
+from api_maersk.utils.logger import setup_logger
 import mysql.connector
-from config.settings import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+from api_maersk.config.settings import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
 import time
 
 from datetime import datetime

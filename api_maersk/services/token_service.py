@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import Dict, Optional
 from pathlib import Path
 
-from config.settings import TOKENS_FILE, CUSTOMER_CODE_MAPPING
-from utils.logger import setup_logger
+from api_maersk.config.settings import TOKENS_FILE, CUSTOMER_CODE_MAPPING
+from api_maersk.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
