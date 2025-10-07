@@ -3,10 +3,6 @@ sync_invoices.py
 Sincroniza invoices da API Hapag com o banco de dados
 """
 
-import sys
-
-sys.path.insert(0, '..')
-
 import logging
 import requests
 from typing import Optional
@@ -58,9 +54,13 @@ def invoice_existe_no_bd(invoice_number: str) -> bool:
     """Verifica se invoice já existe no banco"""
     sql = "SELECT id FROM invoice WHERE numero_invoice = %s AND armador = 'HAPAG' LIMIT 1"
 
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(sql, (invoice_number,))
-        return cur.fetchone() is not None
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(sql, (invoice_number,))
+            return cur.fetchone() is not None
+    except Exception as e:
+        logger.error(f"Erro ao verificar existência da invoice {invoice_number}: {e}")
+        return False
 
 
 def inserir_invoice(invoice_data: dict) -> int | None:
@@ -93,7 +93,7 @@ def inserir_invoice(invoice_data: dict) -> int | None:
             cur.execute(sql, (
                 str(invoice_data.get('invoiceNumber')),
                 'HAPAG',
-                str(invoice_data.get('bookingNumber')),
+                str(invoice_data.get('bookingNumber', '')),  # Proteção contra None
                 invoice_data.get('invoiceAmount'),
                 status
             ))
@@ -107,6 +107,7 @@ def inserir_invoice(invoice_data: dict) -> int | None:
 def atualizar_invoice(invoice_data: dict) -> bool:
     """
     Atualiza invoice existente no banco
+    CORRIGIDO: Usa os nomes corretos das colunas
 
     Args:
         invoice_data: Dicionário com dados da API
@@ -116,10 +117,10 @@ def atualizar_invoice(invoice_data: dict) -> bool:
     """
     sql = """
         UPDATE invoice
-        SET booking_number = %s,
-            invoice_amount = %s,
-            invoice_status = %s,
-            updated_at = NOW()
+        SET numero_bl = %s,
+            valor = %s,
+            status = %s,
+            updated_at = CURRENT_TIMESTAMP(3)
         WHERE numero_invoice = %s
           AND armador = 'HAPAG'
     """
@@ -131,7 +132,7 @@ def atualizar_invoice(invoice_data: dict) -> bool:
     try:
         with get_conn() as conn, conn.cursor() as cur:
             cur.execute(sql, (
-                invoice_data.get('bookingNumber'),
+                str(invoice_data.get('bookingNumber', '')),  # Proteção contra None
                 invoice_data.get('invoiceAmount'),
                 status,
                 str(invoice_data.get('invoiceNumber'))
@@ -184,7 +185,9 @@ def sincronizar_invoices():
             # Insere nova
             if inserir_invoice(inv_data):
                 inseridas += 1
-                logger.info(f"  ✅ Nova invoice inserida: {invoice_number}")
+                # Log apenas das primeiras 10 inserções para não poluir
+                if inseridas <= 10:
+                    logger.info(f"  ✅ Nova invoice inserida: {invoice_number}")
             else:
                 erros += 1
 

@@ -1,10 +1,13 @@
 """
 dispute_service.py
 Serviço para consultar disputas na API da Hapag-Lloyd.
+MELHORADO: Retry automático e validação robusta
 """
 
 import logging
 import requests
+import time
+from typing import Optional
 from api_hapag.services.token_service import get_valid_token
 from api_hapag.repos.dispute_repository import update_disputa_completa
 
@@ -14,9 +17,58 @@ logging.basicConfig(
 )
 
 
+def fazer_requisicao_com_retry(url: str, headers: dict, max_tentativas: int = 3, metodo: str = "GET",
+                               payload: dict = None) -> requests.Response | None:
+    """
+    Faz requisição HTTP com retry automático
+
+    Args:
+        url: URL da API
+        headers: Headers da requisição
+        max_tentativas: Número máximo de tentativas
+        metodo: GET ou POST
+        payload: Dados para POST (opcional)
+
+    Returns:
+        Response ou None se todas as tentativas falharem
+    """
+    for tentativa in range(1, max_tentativas + 1):
+        try:
+            if metodo == "POST":
+                r = requests.post(url, headers=headers, json=payload, timeout=20)
+            else:
+                r = requests.get(url, headers=headers, timeout=20)
+
+            # Se for 200 ou 404, retorna (não precisa retry)
+            if r.status_code in [200, 404]:
+                return r
+
+            # Se for 401 (token inválido), não adianta retry
+            if r.status_code == 401:
+                logging.error(f"Token inválido (401). Renovação necessária.")
+                return None
+
+            # Para outros erros, tenta novamente
+            logging.warning(f"Tentativa {tentativa}/{max_tentativas} falhou: {r.status_code}")
+
+            if tentativa < max_tentativas:
+                tempo_espera = 2 ** tentativa  # Backoff exponencial: 2, 4, 8 segundos
+                logging.info(f"Aguardando {tempo_espera}s antes de tentar novamente...")
+                time.sleep(tempo_espera)
+
+        except requests.RequestException as e:
+            logging.error(f"Erro na requisição (tentativa {tentativa}/{max_tentativas}): {e}")
+            if tentativa < max_tentativas:
+                time.sleep(2 ** tentativa)
+
+    logging.error(f"Todas as {max_tentativas} tentativas falharam")
+    return None
+
+
 def consultar_disputa(dispute_number: int) -> dict | None:
     """
     Consulta detalhes completos de uma disputa específica na API.
+    MELHORADO: Com retry automático
 
     Args:
         dispute_number: Número da disputa na Hapag
@@ -38,38 +90,38 @@ def consultar_disputa(dispute_number: int) -> dict | None:
         "Accept": "application/json"
     }
 
-    try:
-        r = requests.get(url, headers=headers, timeout=20)
-        if r.status_code == 200:
-            data = r.json()
-            logging.info(f"Disputa {dispute_number} consultada com sucesso")
+    r = fazer_requisicao_com_retry(url, headers)
 
-            # Valida se tem status (campo obrigatório)
-            status = data.get('status') or data.get('disputeStatus') or data.get('currentStatus')
-            if not status:
-                logging.warning(f"Disputa {dispute_number}: status não encontrado na API")
-                return None
+    if not r:
+        return None
 
-            # Normaliza campos da API para o formato do banco
-            return {
-                'status': status,
-                'dispute_reason': data.get('dispute_reason'),
-                'amount': data.get('amount'),
-                'currency': data.get('currency'),
-                'ref': data.get('ref'),
-                'allowSecondReview': data.get('allowSecondReview'),
-                'disputeCreated': data.get('disputeCreated'),
-                'invoiceNumber': data.get('invoiceNumber'),
-                'disputeNumber': data.get('disputeNumber')
-            }
-        elif r.status_code == 404:
-            logging.warning(f"Disputa {dispute_number} não encontrada")
+    if r.status_code == 200:
+        data = r.json()
+        logging.info(f"Disputa {dispute_number} consultada com sucesso")
+
+        # Valida se tem status (campo obrigatório)
+        status = data.get('status') or data.get('disputeStatus') or data.get('currentStatus')
+        if not status:
+            logging.warning(f"Disputa {dispute_number}: status não encontrado na API")
             return None
-        else:
-            logging.error(f"Erro {r.status_code}: {r.text}")
-            return None
-    except requests.RequestException as e:
-        logging.error(f"Erro na requisição: {e}")
+
+        # Normaliza campos da API para o formato do banco
+        return {
+            'status': status,
+            'dispute_reason': data.get('dispute_reason') or data.get('disputeReason'),
+            'amount': data.get('amount') or data.get('disputedAmount'),
+            'currency': data.get('currency'),
+            'ref': data.get('ref') or data.get('reference'),
+            'allowSecondReview': data.get('allowSecondReview'),
+            'disputeCreated': data.get('disputeCreated') or data.get('createdDate'),
+            'invoiceNumber': data.get('invoiceNumber'),
+            'disputeNumber': data.get('disputeNumber') or dispute_number
+        }
+    elif r.status_code == 404:
+        logging.warning(f"Disputa {dispute_number} não encontrada")
+        return None
+    else:
+        logging.error(f"Erro {r.status_code}: {r.text}")
         return None
 
 
@@ -77,6 +129,7 @@ def consultar_invoice(invoice_number: str) -> list | None:
     """
     Consulta disputas relacionadas a uma invoice.
     Retorna lista de disputas com todos os campos normalizados.
+    MELHORADO: Com retry e melhor normalização
 
     Args:
         invoice_number: Número da invoice
@@ -98,39 +151,31 @@ def consultar_invoice(invoice_number: str) -> list | None:
         "Accept": "application/json"
     }
 
-    try:
-        # Tenta GET primeiro
-        r = requests.get(f"{url}?invoiceNumber={invoice_number}", headers=headers, timeout=20)
+    # Tenta GET primeiro
+    r = fazer_requisicao_com_retry(f"{url}?invoiceNumber={invoice_number}", headers)
 
-        if r.status_code == 200:
-            logging.info(f"Invoice {invoice_number}: disputas encontradas via GET")
-            return _normalizar_disputas(r.json())
+    if r and r.status_code == 200:
+        logging.info(f"Invoice {invoice_number}: disputas encontradas via GET")
+        return _normalizar_disputas(r.json())
 
-        elif r.status_code == 404:
-            # Se não encontrou via GET, tenta POST
-            logging.info(f"Invoice {invoice_number}: tentando POST...")
-            payload = {"invoiceNumber": invoice_number}
-            r = requests.post(url, headers=headers, json=payload, timeout=20)
+    # Se não encontrou via GET, tenta POST
+    logging.info(f"Invoice {invoice_number}: tentando POST...")
+    payload = {"invoiceNumber": invoice_number}
+    r = fazer_requisicao_com_retry(url, headers, metodo="POST", payload=payload)
 
-            if r.status_code == 200:
-                logging.info(f"Invoice {invoice_number}: disputas encontradas via POST")
-                return _normalizar_disputas(r.json())
-            else:
-                logging.warning(f"Invoice {invoice_number}: não encontrada")
-                return None
-        else:
-            logging.error(f"Erro {r.status_code}: {r.text}")
-            return None
+    if r and r.status_code == 200:
+        logging.info(f"Invoice {invoice_number}: disputas encontradas via POST")
+        return _normalizar_disputas(r.json())
 
-    except requests.RequestException as e:
-        logging.error(f"Erro na requisição: {e}")
-        return None
+    logging.warning(f"Invoice {invoice_number}: nenhuma disputa encontrada")
+    return None
 
 
 def _normalizar_disputas(data: list | dict) -> list:
     """
     Normaliza resposta da API para formato padronizado.
     A API pode retornar lista ou objeto único.
+    MELHORADO: Mais campos alternativos
     """
     if not data:
         return []
@@ -150,12 +195,12 @@ def _normalizar_disputas(data: list | dict) -> list:
         disputas_normalizadas.append({
             'disputeNumber': d.get('disputeNumber'),
             'status': status,
-            'dispute_reason': d.get('dispute_reason'),
-            'amount': d.get('amount'),
+            'dispute_reason': d.get('dispute_reason') or d.get('disputeReason'),
+            'amount': d.get('amount') or d.get('disputedAmount'),
             'currency': d.get('currency'),
-            'ref': d.get('ref'),
+            'ref': d.get('ref') or d.get('reference'),
             'allowSecondReview': d.get('allowSecondReview'),
-            'disputeCreated': d.get('disputeCreated'),
+            'disputeCreated': d.get('disputeCreated') or d.get('createdDate'),
             'invoiceNumber': d.get('invoiceNumber')
         })
 

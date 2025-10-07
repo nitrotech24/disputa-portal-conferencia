@@ -51,6 +51,18 @@ def processar_invoice(inv, idx, total):
             dispute_no = d.get('disputeNumber')
             status = d.get('status')
 
+            # --- VERIFICAÇÃO NOVA ---
+            api_invoice = str(d.get('invoiceNumber') or '').strip()
+            current_invoice = str(inv.numero_invoice).strip()
+
+            if api_invoice and api_invoice != current_invoice:
+                logging.warning(
+                    f"⚠️ Disputa {dispute_no} pertence à invoice {api_invoice}, "
+                    f"mas veio na resposta da invoice {current_invoice}. Ignorando."
+                )
+                continue
+            # --- FIM DA VERIFICAÇÃO ---
+
             logging.info(
                 f"   📌 Invoice {inv.numero_invoice}: Disputa {dispute_no} "
                 f"(status={status}, valor={d.get('amount')} {d.get('currency')})"
@@ -61,6 +73,9 @@ def processar_invoice(inv, idx, total):
                 dispute_number=dispute_no,
                 data=d
             )
+
+            resultado['disputas_salvas'] += 1
+            logging.info(f"   ✅ Disputa {dispute_no} sincronizada (id={saved_id})")
 
             resultado['disputas_salvas'] += 1
             logging.info(f"   ✅ Disputa {dispute_no} sincronizada (id={saved_id})")
