@@ -1,7 +1,7 @@
 """
 main.py
 Executa o fluxo completo de sincronização de disputas
-OTIMIZADO: Busca global de disputas + Processamento em lote
+OTIMIZADO: Busca disputas primeiro, sincroniza apenas invoices relevantes
 """
 
 import sys
@@ -14,10 +14,9 @@ sys.path.insert(0, str(parent_dir))
 from api_hapag.utils.logger import setup_logger
 from api_hapag.services.token_service import get_valid_token
 from api_hapag.services.sync_service import (
-    sincronizar_disputas,
+    sincronizar_disputas_e_invoices,
     atualizar_disputas_antigas
 )
-from api_hapag.services.sync_invoices import sincronizar_invoices
 
 logger = setup_logger()
 
@@ -26,12 +25,14 @@ def main():
     """
     Fluxo principal OTIMIZADO:
     1. Valida/renova token
-    2. Sincroniza invoices da API (processamento em lote)
-    3. Sincroniza disputas (busca global, 1 chamada à API)
+    2. Busca disputas da API (1 chamada)
+    3. Sincroniza APENAS invoices que têm disputa
     4. Atualiza disputas antigas (>2h e não finalizadas)
+
+    LÓGICA: Não faz sentido sincronizar 604 invoices se só 8 têm disputa!
     """
     logger.info("=" * 60)
-    logger.info("SINCRONIZAÇÃO COMPLETA HAPAG-LLOYD")
+    logger.info("SINCRONIZAÇÃO INTELIGENTE HAPAG-LLOYD")
     logger.info("=" * 60)
 
     try:
@@ -46,18 +47,13 @@ def main():
         logger.info("Token validado com sucesso")
         logger.info("")
 
-        # Etapa 2: Sincronizar invoices (OTIMIZADO: batch operations)
-        logger.info("Etapa 2: Sincronizando invoices da API...")
-        sincronizar_invoices()
+        # Etapa 2: Sincronizar disputas E invoices relacionadas
+        logger.info("Etapa 2: Sincronizando disputas e invoices relacionadas...")
+        sincronizar_disputas_e_invoices()
         logger.info("")
 
-        # Etapa 3: Sincronizar disputas (OTIMIZADO: 1 chamada global)
-        logger.info("Etapa 3: Sincronizando disputas...")
-        sincronizar_disputas()
-        logger.info("")
-
-        # Etapa 4: Atualizar disputas antigas
-        logger.info("Etapa 4: Atualizando disputas desatualizadas...")
+        # Etapa 3: Atualizar disputas antigas
+        logger.info("Etapa 3: Atualizando disputas desatualizadas...")
         atualizar_disputas_antigas(max_workers=5)
         logger.info("")
 
@@ -85,7 +81,6 @@ def main_quick():
     logger.info("=" * 60)
 
     try:
-        # Valida token
         logger.info("Validando token...")
         token = get_valid_token()
 
@@ -96,7 +91,6 @@ def main_quick():
         logger.info("Token validado")
         logger.info("")
 
-        # Atualiza apenas disputas antigas
         atualizar_disputas_antigas(max_workers=5)
         logger.info("")
 
@@ -115,7 +109,6 @@ def main_quick():
 
 
 if __name__ == "__main__":
-    # Verifica argumento da linha de comando
     if len(sys.argv) > 1:
         if sys.argv[1] == "--quick":
             main_quick()
