@@ -1,7 +1,7 @@
 """
 main.py
 Executa o fluxo completo de sincronização de disputas
-CORRIGIDO: Import correto do sync_invoices
+OTIMIZADO: Busca global de disputas + Processamento em lote
 """
 
 import sys
@@ -17,8 +17,6 @@ from api_hapag.services.sync_service import (
     sincronizar_disputas,
     atualizar_disputas_antigas
 )
-
-# CORRIGIDO: sync_invoices está em services/
 from api_hapag.services.sync_invoices import sincronizar_invoices
 
 logger = setup_logger()
@@ -26,10 +24,10 @@ logger = setup_logger()
 
 def main():
     """
-    Fluxo principal com 4 etapas:
+    Fluxo principal OTIMIZADO:
     1. Valida/renova token
-    2. Sincroniza invoices da API
-    3. Sincroniza disputas das invoices
+    2. Sincroniza invoices da API (processamento em lote)
+    3. Sincroniza disputas (busca global, 1 chamada à API)
     4. Atualiza disputas antigas (>2h e não finalizadas)
     """
     logger.info("=" * 60)
@@ -42,20 +40,20 @@ def main():
         token = get_valid_token()
 
         if not token:
-            logger.error("❌ Falha ao obter token válido. Abortando.")
+            logger.error("Falha ao obter token válido. Abortando.")
             sys.exit(1)
 
-        logger.info("✅ Token validado com sucesso")
+        logger.info("Token validado com sucesso")
         logger.info("")
 
-        # Etapa 2: Sincronizar invoices
+        # Etapa 2: Sincronizar invoices (OTIMIZADO: batch operations)
         logger.info("Etapa 2: Sincronizando invoices da API...")
         sincronizar_invoices()
         logger.info("")
 
-        # Etapa 3: Sincronizar disputas
-        logger.info("Etapa 3: Sincronizando disputas das invoices...")
-        sincronizar_disputas(limit=None, max_workers=1)
+        # Etapa 3: Sincronizar disputas (OTIMIZADO: 1 chamada global)
+        logger.info("Etapa 3: Sincronizando disputas...")
+        sincronizar_disputas()
         logger.info("")
 
         # Etapa 4: Atualizar disputas antigas
@@ -64,14 +62,14 @@ def main():
         logger.info("")
 
         logger.info("=" * 60)
-        logger.info("✅ SINCRONIZAÇÃO COMPLETA CONCLUÍDA")
+        logger.info("SINCRONIZAÇÃO COMPLETA CONCLUÍDA")
         logger.info("=" * 60)
 
     except KeyboardInterrupt:
-        logger.warning("\n⚠️  Sincronização interrompida pelo usuário")
+        logger.warning("\nSincronização interrompida pelo usuário")
         sys.exit(130)
     except Exception as e:
-        logger.error(f"❌ Erro na execução: {e}")
+        logger.error(f"Erro na execução: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
@@ -92,10 +90,10 @@ def main_quick():
         token = get_valid_token()
 
         if not token:
-            logger.error("❌ Falha ao obter token válido. Abortando.")
+            logger.error("Falha ao obter token válido. Abortando.")
             sys.exit(1)
 
-        logger.info("✅ Token validado")
+        logger.info("Token validado")
         logger.info("")
 
         # Atualiza apenas disputas antigas
@@ -103,14 +101,14 @@ def main_quick():
         logger.info("")
 
         logger.info("=" * 60)
-        logger.info("✅ ATUALIZAÇÃO RÁPIDA CONCLUÍDA")
+        logger.info("ATUALIZAÇÃO RÁPIDA CONCLUÍDA")
         logger.info("=" * 60)
 
     except KeyboardInterrupt:
-        logger.warning("\n⚠️  Atualização interrompida pelo usuário")
+        logger.warning("\nAtualização interrompida pelo usuário")
         sys.exit(130)
     except Exception as e:
-        logger.error(f"❌ Erro na execução: {e}")
+        logger.error(f"Erro na execução: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
@@ -118,7 +116,13 @@ def main_quick():
 
 if __name__ == "__main__":
     # Verifica argumento da linha de comando
-    if len(sys.argv) > 1 and sys.argv[1] == "--quick":
-        main_quick()
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "--quick":
+            main_quick()
+        else:
+            print("Uso: python main.py [--quick]")
+            print("  (sem argumentos): sincronização completa")
+            print("  --quick: apenas atualiza disputas antigas")
+            sys.exit(1)
     else:
         main()
