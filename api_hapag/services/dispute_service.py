@@ -235,3 +235,149 @@ def atualizar_status_disputa(disputa_id: int, dispute_number: int) -> bool:
     except Exception as e:
         logging.error(f"Erro ao atualizar disputa {dispute_number}: {e}")
         return False
+
+
+def enviar_disputa_hapag(
+        invoice_id: int,
+        invoice_number: str,
+        shipment_number: str,
+        disputed_amount: str,
+        contact_email: str,
+        dispute_text: str,
+        charge_type: str = "WRONG_RELATION",
+        dispute_type: str = "D16",
+        disputed_currency: str = "USD"
+) -> dict | None:
+    """
+    Envia uma nova disputa para a API Hapag-Lloyd e salva no banco.
+
+    Args:
+        invoice_id: ID da invoice no banco local
+        invoice_number: Número da invoice Hapag
+        shipment_number: Número do shipment/BL
+        disputed_amount: Valor disputado
+        contact_email: Email de contato
+        dispute_text: Texto explicativo da disputa
+        charge_type: Tipo de cobrança (padrão: "WRONG_RELATION")
+        dispute_type: Código do tipo (padrão: "D16")
+        disputed_currency: Moeda (padrão: "USD")
+
+    Returns:
+        dict com disputeNumber e status, ou None se erro
+    """
+    from api_hapag.utils.storage import load_token
+    from api_hapag.repos.dispute_repository import upsert_disputa
+    import uuid
+
+    # Mapeamento de tipos
+    charge_types = {
+        "WRONG_RELATION": "Incorrect demurrage/detention charges or freetime application",
+        "WRONG_AMOUNT": "Incorrect invoice amount",
+        "WRONG_CHARGES": "Wrong charges applied",
+        "DUPLICATE": "Duplicate invoice",
+        "ALREADY_PAID": "Invoice already paid"
+    }
+
+    dispute_types = {
+        "D16": "Incorrect origin timepending charges",
+        "D17": "Incorrect destination timepending charges",
+        "D01": "Incorrect freight charges",
+        "D02": "Incorrect detention charges",
+        "D03": "Incorrect demurrage charges",
+        "D04": "Invoice already paid",
+        "D05": "Duplicate invoice"
+    }
+
+    # Valida token
+    token = load_token()
+    if not token:
+        logging.error("Token não encontrado")
+        return None
+
+    # Prepara requisição
+    url = "https://dispute-form.api.hlag.cloud/api/dispute-form"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "x-token": token,
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "invoiceDisputePositions": [
+            {
+                "id": str(uuid.uuid4()),
+                "invoiceNumber": str(invoice_number),
+                "shipmentNumber": str(shipment_number),
+                "disputedCurrency": disputed_currency,
+                "disputedAmount": str(disputed_amount)
+            }
+        ],
+        "contactEmail": contact_email,
+        "chargeType": charge_type,
+        "chargeTypeLabel": charge_types.get(charge_type, charge_type),
+        "disputeType": dispute_type,
+        "disputeTypeLabel": dispute_types.get(dispute_type, dispute_type),
+        "disputeText": dispute_text.strip(),
+        "customerReference": contact_email,
+        "attachmentIds": []
+    }
+
+    logging.info(f"Enviando disputa para invoice {invoice_number}...")
+
+    # Envia para API
+    r = fazer_requisicao_com_retry(
+        url=url,
+        headers=headers,
+        metodo="POST",
+        payload=payload,
+        max_tentativas=3
+    )
+
+    if not r:
+        logging.error("Falha ao enviar disputa")
+        return None
+
+    # Processa resposta
+    if r.status_code == 200:
+        data = r.json()
+        dispute_number = data.get('disputeNumber')
+
+        logging.info(f"✅ Disputa {dispute_number} enviada com sucesso")
+
+        # Salva no banco
+        try:
+            if dispute_number:
+                disputa_id = upsert_disputa(
+                    invoice_id=invoice_id,
+                    dispute_number=dispute_number,
+                    data={
+                        'status': 'SUBMITTED',
+                        'dispute_reason': dispute_type,
+                        'amount': disputed_amount,
+                        'currency': disputed_currency,
+                        'ref': contact_email,
+                        'allowSecondReview': False,
+                        'disputeCreated': None
+                    }
+                )
+                logging.info(f"✅ Disputa salva no banco (id={disputa_id})")
+        except Exception as e:
+            logging.error(f"Erro ao salvar no banco: {e}")
+
+        return {
+            'disputeNumber': dispute_number,
+            'status': data.get('status', 'SUBMITTED'),
+            'message': 'Disputa criada com sucesso'
+        }
+
+    elif r.status_code == 400:
+        logging.error(f"❌ Dados inválidos (400): {r.text}")
+        return None
+    elif r.status_code == 409:
+        logging.warning(f"⚠️ Disputa já existe (409): {r.text}")
+        return None
+    else:
+        logging.error(f"❌ Erro {r.status_code}: {r.text}")
+        return None
