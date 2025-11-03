@@ -2,12 +2,10 @@ import time
 from typing import Dict, Optional
 
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 
 from api_maersk.config.settings import (
     MAERSK_USERNAME, MAERSK_PASSWORD, MAERSK_BASE_URL,
@@ -33,16 +31,17 @@ class AuthService:
         chrome_options = Options()
         chrome_options.add_argument("--start-maximized")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+
         try:
-            driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()),
-                options=chrome_options
-            )
+            # Selenium 4.26+ gerencia automaticamente o ChromeDriver compatível
+            driver = webdriver.Chrome(options=chrome_options)
+            logger.info("Chrome WebDriver iniciado com sucesso.")
             return driver
         except Exception as e:
-            logger.error(f"Erro Configurar Chrome WebDriver: {e}")
+            logger.error(f"Erro ao configurar Chrome WebDriver: {e}")
             raise e
-
 
     def _close_cookie_popup(self, driver: webdriver.Chrome) -> None:
         """Fecha popup de cookies se existir."""
