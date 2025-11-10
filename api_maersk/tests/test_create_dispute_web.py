@@ -15,9 +15,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ============================================================
-# CONFIGURAÇÃO DO TESTE
-# ============================================================
+# Dados de teste
 INVOICE_NUMBER = "7539273935"
 CUSTOMER_CODE = "305S3073SPA"
 
@@ -27,23 +25,20 @@ CONTACT_NAME = "Henrique Spencer"
 CONTACT_EMAIL = "henrique.spencer@empresa.com"
 CONTACT_PHONE = "+55 84 99999-9999"
 
-# ============================================================
-# EXECUÇÃO DO TESTE
-# ============================================================
 if __name__ == "__main__":
     logger.info("=" * 80)
     logger.info("TESTE: CRIAÇÃO DE DISPUTA VIA AUTOMAÇÃO WEB")
     logger.info("=" * 80)
     logger.info("")
-    logger.info("⚠️  ATENÇÃO: Este teste vai:")
+    logger.info("Este teste vai:")
     logger.info("1. Abrir o navegador Chrome")
     logger.info("2. Realizar login automático")
     logger.info("3. Buscar a invoice informada")
     logger.info("4. Clicar em 'Contestar' e abrir o formulário de disputa")
     logger.info("")
-    logger.info("💡 IMPORTANTE:")
-    logger.info("   - Garanta que a conta usada tenha acesso à fatura informada.")
-    logger.info("   - Feche outras sessões ativas do portal Maersk.")
+    logger.info("Pré-requisitos:")
+    logger.info("- Conta com acesso à fatura informada")
+    logger.info("- Fechar outras sessões ativas do portal Maersk")
     logger.info("")
     logger.info("Pressione Ctrl+C nos próximos 5 segundos para cancelar...")
     logger.info("=" * 80)
@@ -51,7 +46,7 @@ if __name__ == "__main__":
     time.sleep(5)
 
     logger.info("=" * 80)
-    logger.info("🚀 INICIANDO EXECUÇÃO")
+    logger.info("Iniciando execução")
     logger.info("=" * 80)
 
     token_service = TokenService()
@@ -73,9 +68,10 @@ if __name__ == "__main__":
     logger.info("=" * 80)
 
     if result.get("success"):
-        logger.info("✅ SUCESSO!")
+        logger.info("Sucesso!")
         logger.info("Mensagem: %s", result.get("message", ""))
     else:
-        logger.error("❌ FALHOU!")
+        logger.error("Falha na execução")
         logger.error("Erro: %s", result.get("error", ""))
-        logger.info("=" * 80)
+
+    logger.info("=" * 80)

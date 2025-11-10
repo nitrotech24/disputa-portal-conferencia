@@ -1,6 +1,6 @@
 """
-Serviço de automação para criação de disputas no portal Maersk.
-VERSÃO FINAL — Clique direto em <mc-button data-test="button-dispute">
+Automação de criação de disputas no portal Maersk.
+Navegação direta via URL
 """
 
 import time
@@ -10,9 +10,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.common.exceptions import TimeoutException
 
 from api_maersk.config.settings import (
     MAERSK_USERNAME,
@@ -28,245 +25,148 @@ logger = setup_logger(__name__)
 
 
 class MaerskDisputeAutomation:
-    """Automação completa para criação de disputas no portal Maersk."""
+    """Automação para criação de disputas no portal Maersk."""
 
     def __init__(self, token_service: TokenService):
         self.token_service = token_service
         self.driver = None
 
-    # =============================================================
-    # SETUP E LOGIN
-    # =============================================================
     def _setup_driver(self) -> webdriver.Chrome:
-        logger.info("🔧 Configurando Chrome WebDriver...")
-        chrome_options = Options()
-        chrome_options.add_argument("--start-maximized")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option("useAutomationExtension", False)
-        driver = webdriver.Chrome(options=chrome_options)
-        logger.info("✅ Chrome WebDriver inicializado!")
+        logger.info("Configurando Chrome WebDriver...")
+        options = Options()
+        options.add_argument("--start-maximized")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option("useAutomationExtension", False)
+        driver = webdriver.Chrome(options=options)
+        logger.info("Chrome WebDriver inicializado com sucesso")
         return driver
 
-    def _close_cookie_popup(self, driver):
-        try:
-            logger.info("🍪 Tentando fechar popup de cookies...")
-            cookie_btn = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Allow all')]"))
-            )
-            cookie_btn.click()
-            logger.info("✅ Popup de cookies fechado")
-            time.sleep(2)
-        except:
-            logger.info("💡 Popup de cookies não encontrado")
-
     def _perform_login(self, driver):
-        logger.info("🌐 Acessando site da Maersk...")
+        logger.info("Acessando portal Maersk...")
         driver.get(MAERSK_BASE_URL)
         time.sleep(PAGE_LOAD_WAIT)
-        self._close_cookie_popup(driver)
-
-        logger.info("🔐 Realizando login...")
-        wait = WebDriverWait(driver, SELENIUM_TIMEOUT)
-
-        login_link = wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Login")))
-        login_link.click()
-        time.sleep(PAGE_LOAD_WAIT)
-
-        user_field = wait.until(EC.presence_of_element_located((By.NAME, "username")))
-        user_field.send_keys(MAERSK_USERNAME)
-        pwd_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
-        pwd_field.send_keys(MAERSK_PASSWORD)
-
-        login_submit = wait.until(EC.element_to_be_clickable((By.ID, "login-submit-button")))
-        login_submit.click()
-
-        logger.info("⏳ Aguardando pós-login...")
-        time.sleep(5)
 
         try:
+            btn = WebDriverWait(driver, 5).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(),'Allow all')]"))
+            )
+            btn.click()
+            logger.info("Popup de cookies fechado")
+        except:
+            logger.info("Nenhum popup de cookies detectado")
+
+        logger.info("Realizando login...")
+        wait = WebDriverWait(driver, SELENIUM_TIMEOUT)
+        wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Login"))).click()
+        time.sleep(PAGE_LOAD_WAIT)
+
+        user = wait.until(EC.presence_of_element_located((By.NAME, "username")))
+        pwd = wait.until(EC.presence_of_element_located((By.NAME, "password")))
+        user.send_keys(MAERSK_USERNAME)
+        pwd.send_keys(MAERSK_PASSWORD)
+        wait.until(EC.element_to_be_clickable((By.ID, "login-submit-button"))).click()
+
+        time.sleep(5)
+        try:
             WebDriverWait(driver, 15).until(EC.url_contains("/portaluser/select-customer"))
-            logger.info("✅ Página de seleção de customer detectada")
+            logger.info("Página de seleção de customer detectada")
             return True
         except:
-            logger.info("💡 Customer já selecionado automaticamente, continuando...")
+            logger.info("Customer já selecionado automaticamente")
             return False
 
     def _select_customer(self, driver, customer_code):
-        logger.info(f"👤 Selecionando customer {customer_code}...")
-        try:
-            script = """
-            let targetCode = arguments[0];
-            let mcTable = document.querySelector('mc-table');
-            if (mcTable && mcTable.shadowRoot) {
-                let cells = mcTable.shadowRoot.querySelectorAll('td[data-header-id="name"] div[role="cell"]');
-                for (let cell of cells) {
-                    let codeSpan = cell.querySelector('span.mds-font--small');
-                    if (codeSpan && codeSpan.textContent.trim() === targetCode) {
-                        cell.click();
-                        return true;
-                    }
-                }
-            }
-            return false;
-            """
-            success = driver.execute_script(script, customer_code)
-            if success:
-                time.sleep(5)
-                logger.info("✅ Customer selecionado com sucesso!")
-                return True
-            logger.error(f"❌ Customer {customer_code} não encontrado")
-            return False
-        except Exception as e:
-            logger.error(f"❌ Erro ao selecionar customer: {e}")
+        logger.info(f"Selecionando customer {customer_code}...")
+        script = """
+        const code = arguments[0];
+        const mcTable = document.querySelector('mc-table');
+        if (!mcTable || !mcTable.shadowRoot) return false;
+        const cells = mcTable.shadowRoot.querySelectorAll('td[data-header-id="name"] div[role="cell"]');
+        for (let c of cells) {
+            const span = c.querySelector('span.mds-font--small');
+            if (span && span.textContent.trim() === code) { c.click(); return true; }
+        }
+        return false;
+        """
+        success = driver.execute_script(script, customer_code)
+        if success:
+            time.sleep(4)
+            logger.info("Customer selecionado com sucesso")
+            return True
+        else:
+            logger.warning("Customer não encontrado")
             return False
 
-    # =============================================================
-    # NAVEGAÇÃO E BUSCA
-    # =============================================================
-    def _navigate_to_myfinance(self, driver):
-        logger.info("💰 Navegando para MyFinance...")
-        driver.get(f"{MAERSK_BASE_URL}/myfinance")
-        time.sleep(5)
-        logger.info(f"✅ MyFinance carregado ({driver.current_url})")
-
-    def _navigate_to_open_invoices(self, driver):
-        logger.info("📋 Clicando na aba 'Open Invoices'...")
-        try:
-            open_invoices_tab = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "mc-tab[data-test='openInvoices-tab']"))
-            )
-            open_invoices_tab.click()
-            logger.info("✅ Aba 'Open Invoices' clicada!")
-            time.sleep(3)
-        except:
-            logger.error("❌ Aba 'Open Invoices' não encontrada")
-
-    def _search_invoice(self, driver: webdriver.Chrome, invoice_number: str) -> bool:
-        """Busca a invoice e clica em 'Contestar'."""
-        logger.info(f"🔍 Buscando invoice {invoice_number}...")
-
-        try:
-            search_box = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[placeholder*='Fatura']"))
-            )
-            logger.info("✅ Campo de busca localizado!")
-
-            driver.execute_script("arguments[0].focus(); arguments[0].value='';", search_box)
-            search_box.send_keys(invoice_number)
-            time.sleep(0.5)
-
-            # Enter realista
-            logger.info("🚀 Disparando evento Enter real...")
-            driver.execute_script("""
-                const input = arguments[0];
-                input.focus();
-                const evDown = new KeyboardEvent('keydown', {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true, composed:true});
-                const evUp = new KeyboardEvent('keyup', {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true, composed:true});
-                input.dispatchEvent(evDown);
-                input.dispatchEvent(evUp);
-                input.blur();
-            """, search_box)
-            time.sleep(6)
-
-            # Verifica se abriu página de busca
-            current_url = driver.current_url
-            if "/search?" not in current_url:
-                logger.warning("⚠️ URL de busca não detectada — tentando Enter extra.")
-                ActionChains(driver).move_to_element(search_box).send_keys(Keys.ENTER).perform()
-                time.sleep(6)
-
-            logger.info(f"🔎 URL atual: {current_url}")
-            if "/search?" not in current_url:
-                logger.error("❌ Busca não executada corretamente (URL não mudou).")
-                driver.save_screenshot("debug_search_failed.png")
-                return False
-
-            # ----------------------------------------------------------------------
-            # ETAPA FINAL: clicar diretamente no botão 'Contestar'
-            # ----------------------------------------------------------------------
-            logger.info("🧭 Procurando o botão 'Contestar' na página de resultados...")
-
-            try:
-                WebDriverWait(driver, 15).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "div[data-cy='table-wrapper']"))
-                )
-                time.sleep(2)
-
-                driver.execute_script("window.scrollTo({top: document.body.scrollHeight/3, behavior: 'smooth'});")
-                time.sleep(1)
-
-                logger.info("🖱️ Gerando hover global pra revelar ações...")
-                driver.execute_script("""
-                    const evt = new MouseEvent('mousemove', {bubbles:true, composed:true, cancelable:true, view:window});
-                    document.dispatchEvent(evt);
-                """)
-
-                dispute_btn = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "mc-button[data-test='button-dispute']"))
-                )
-                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", dispute_btn)
-                time.sleep(0.5)
-
-                try:
-                    logger.info("🖱️ Tentando clique direto no <mc-button>...")
-                    dispute_btn.click()
-                except Exception:
-                    logger.info("⚙️  Tentando clique interno via shadowRoot...")
-                    driver.execute_script("""
-                        const host = arguments[0];
-                        if (host.shadowRoot) {
-                            const inner = host.shadowRoot.querySelector('button, [role=\"button\"]');
-                            if (inner) inner.click();
-                        } else { host.click(); }
-                    """, dispute_btn)
-
-                logger.info("✅ Clique em 'Contestar' executado com sucesso!")
-                time.sleep(5)
-                return True
-
-            except Exception as e:
-                logger.error(f"❌ Não foi possível clicar no botão 'Contestar': {e}")
-                driver.save_screenshot("debug_contestar_not_clicked.png")
-                return False
-
-        except Exception as e:
-            logger.error(f"❌ Erro geral na busca: {e}")
-            driver.save_screenshot("debug_search_error.png")
-            return False
-
-    # =============================================================
-    # EXECUÇÃO PRINCIPAL
-    # =============================================================
     def create_dispute(self, customer_code, invoice_number, **kwargs) -> Dict:
         logger.info("=" * 80)
-        logger.info("🚀 INICIANDO CRIAÇÃO DE DISPUTA")
-        logger.info("=" * 80)
-        logger.info(f"Customer: {customer_code}")
-        logger.info(f"Invoice: {invoice_number}")
+        logger.info("AUTOMAÇÃO MAERSK - VERSÃO ULTRA SIMPLIFICADA")
         logger.info("=" * 80)
 
         try:
             self.driver = self._setup_driver()
+
+            # Login
             needs_selection = self._perform_login(self.driver)
             if needs_selection:
-                self._select_customer(self.driver, customer_code)
+                if not self._select_customer(self.driver, customer_code):
+                    return {"success": False, "error": "Falha ao selecionar customer"}
 
-            self._navigate_to_myfinance(self.driver)
-            self._navigate_to_open_invoices(self.driver)
+            # Navegação direta para a página de criar disputa
+            logger.info(f"Navegando para página de disputa da invoice {invoice_number}...")
+            dispute_url = f"{MAERSK_BASE_URL}/disputes/create?invoice={invoice_number}"
+            self.driver.get(dispute_url)
 
-            if not self._search_invoice(self.driver, invoice_number):
-                return {"success": False, "error": "Falha ao buscar ou clicar em Contestar"}
+            # Aguarda o carregamento da página
+            logger.info("Aguardando página de disputa carregar...")
+            time.sleep(8)
 
-            return {"success": True, "message": "Formulário de disputa aberto com sucesso"}
+            # Verifica se a URL foi redirecionada corretamente
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    EC.url_contains("/disputes/create")
+                )
+                logger.info("Página de criar disputa aberta com sucesso")
+            except:
+                logger.error("Falha ao redirecionar para página de disputa")
+                self.driver.save_screenshot("debug_nao_redirecionou.png")
+                return {"success": False, "error": "Não chegou na página de disputa"}
+
+            # Verifica se a invoice foi carregada na página
+            logger.info(f"Verificando se invoice {invoice_number} foi carregada...")
+            time.sleep(3)
+
+            invoice_found = self.driver.execute_script("""
+                const invoiceNum = arguments[0];
+                const text = document.body.textContent;
+                return text.includes(invoiceNum);
+            """, invoice_number)
+
+            if invoice_found:
+                logger.info(f"Invoice {invoice_number} encontrada na página")
+            else:
+                logger.warning(f"Invoice {invoice_number} não apareceu na página")
+
+            # Captura screenshot da página final
+            self.driver.save_screenshot("debug_pagina_disputa.png")
+            logger.info("Screenshot salvo: debug_pagina_disputa.png")
+
+            logger.info("Página de disputa aberta com sucesso")
+
+            return {
+                "success": True,
+                "message": "Página de disputa aberta com sucesso",
+                "invoice_found": invoice_found,
+                "url": self.driver.current_url
+            }
 
         except Exception as e:
-            logger.error(f"❌ Erro geral na automação: {e}")
+            logger.exception("Erro inesperado durante execução")
+            self.driver.save_screenshot("debug_erro.png")
             return {"success": False, "error": str(e)}
-
         finally:
             if self.driver:
-                logger.info("🔄 Mantendo navegador aberto 10s para inspeção...")
-                time.sleep(10)
+                logger.info("Encerrando navegador...")
+                time.sleep(20)
                 self.driver.quit()
-                logger.info("✅ Navegador fechado com sucesso.")
+                logger.info("Navegador fechado")
