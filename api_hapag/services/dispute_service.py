@@ -15,6 +15,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
+from api_hapag.utils.storage import load_token
+from api_hapag.repos.dispute_repository import upsert_disputa
+import uuid
 
 
 def fazer_requisicao_com_retry(url: str, headers: dict, max_tentativas: int = 3, metodo: str = "GET",
@@ -76,7 +79,7 @@ def consultar_disputa(dispute_number: int) -> dict | None:
     Returns:
         Dicionário com dados normalizados da disputa ou None se erro
     """
-    from api_hapag.utils.storage import load_token
+
     token = load_token()
 
     if not token:
@@ -137,7 +140,7 @@ def consultar_invoice(invoice_number: str) -> list | None:
     Returns:
         Lista de dicionários com dados das disputas
     """
-    from api_hapag.utils.storage import load_token
+
     token = load_token()
 
     if not token:
@@ -265,9 +268,6 @@ def enviar_disputa_hapag(
     Returns:
         dict com disputeNumber e status, ou None se erro
     """
-    from api_hapag.utils.storage import load_token
-    from api_hapag.repos.dispute_repository import upsert_disputa
-    import uuid
 
     # Mapeamento de tipos
     charge_types = {
