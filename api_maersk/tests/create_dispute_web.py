@@ -25,6 +25,15 @@ CONTACT_NAME = "Henrique Spencer"
 CONTACT_EMAIL = "henrique.spencer@empresa.com"
 CONTACT_PHONE = "+55 84 99999-9999"
 
+DISPUTE_DATA = {
+    "invoice_number": INVOICE_NUMBER,
+    "dipute_reason": "Icorrect Rates", # Opções: Icorrect Rates, Already Paid, Incorrect Payer, Missing Information
+    "invoice_breakdown": [
+        {"Charge name": "Detention Fee - Export (DTS)", "Dispute category": "lala", "Expected amount": "60"}
+    ],
+    "Describe dispute reason": "Esta Errada.",
+}
+
 if __name__ == "__main__":
     logger.info("=" * 80)
     logger.info("TESTE: CRIAÇÃO DE DISPUTA VIA AUTOMAÇÃO WEB")
