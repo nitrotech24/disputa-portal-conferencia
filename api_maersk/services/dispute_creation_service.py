@@ -20,6 +20,7 @@ from api_maersk.config.settings import (
 )
 from api_maersk.services.token_service import TokenService
 from api_maersk.utils.logger import setup_logger
+from selenium.webdriver.common.keys import Keys
 
 logger = setup_logger(__name__)
 
@@ -114,8 +115,80 @@ class MaerskDisputeAutomation:
 
             # Navegação direta para a página de criar disputa
             logger.info(f"Navegando para página de disputa da invoice {invoice_number}...")
-            dispute_url = f"{MAERSK_BASE_URL}/disputes/create?invoice={invoice_number}"
+            #dispute_url = f"{MAERSK_BASE_URL}/disputes/create?invoice={invoice_number}"
+            dispute_url ="https://www.maersk.com/myfinance/"
             self.driver.get(dispute_url)
+
+            #wait = WebDriverWait(self.driver, SELENIUM_TIMEOUT)
+
+            # Aguarda o campo de busca estar presente
+            search_input_script = """
+                // Tenta primeiro sem Shadow DOM
+                let input = document.querySelector('input[placeholder*="Search by B/L"]');
+
+                // Se não encontrar, procura em Shadow DOMs
+                if (!input) {
+                    const allElements = document.querySelectorAll('*');
+                    for (let el of allElements) {
+                        if (el.shadowRoot) {
+                            input = el.shadowRoot.querySelector('input[placeholder*="Search by B/L"]');
+                            if (input) break;
+                        }
+                    }
+                }
+
+                return input;
+                """
+            search_input = self.driver.execute_script(search_input_script)
+            search_input.send_keys('7539273935')
+            search_input.send_keys(Keys.RETURN)
+            time.sleep(5)
+
+
+
+            # Clica no botão Dispute
+            logger.info("Procurando botão Dispute...")
+
+            logger.info("Reduzindo janela para clicar no botão...")
+            self.driver.set_window_size(400, 720)
+            time.sleep(1)  # Aguarda a janela redimensionar
+
+
+            click_dispute_script = """
+            // Procura o botão mc-button com data-test="button-dispute"
+            const button = document.querySelector('mc-button[data-test="button-dispute"]');
+
+            if (!button) {
+                return {success: false, error: 'Botão Dispute não encontrado no DOM'};
+            }
+
+            // Tenta clicar direto no mc-button
+            button.click();
+
+            // Se não funcionar, tenta no shadowRoot
+            if (button.shadowRoot) {
+                const innerButton = button.shadowRoot.querySelector('button');
+                if (innerButton) {
+                    innerButton.click();
+                    return {success: true, message: 'Clicado no botão interno do Shadow DOM'};
+                }
+            }
+
+            return {success: true, message: 'Clicado no mc-button'};
+            """
+            result = self.driver.execute_script(click_dispute_script)
+
+
+            if not result.get('success'):
+                logger.error(f"Erro ao clicar no botão Dispute: {result.get('error')}")
+                self.driver.save_screenshot("debug_botao_dispute_nao_encontrado.png")
+                return {"success": False, "error": result.get('error')}
+
+
+            # Volta ao tamanho original
+            logger.info("Restaurando tamanho original da janela...")
+            self.driver.maximize_window()
+            time.sleep(1)
 
             # Aguarda o carregamento da página
             logger.info("Aguardando página de disputa carregar...")
