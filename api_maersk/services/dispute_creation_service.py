@@ -140,7 +140,7 @@ class MaerskDisputeAutomation:
                 return input;
                 """
             search_input = self.driver.execute_script(search_input_script)
-            search_input.send_keys('7539273935')
+            search_input.send_keys(invoice_number)
             search_input.send_keys(Keys.RETURN)
             time.sleep(5)
 
