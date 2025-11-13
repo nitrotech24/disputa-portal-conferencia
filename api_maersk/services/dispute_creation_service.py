@@ -220,6 +220,266 @@ class MaerskDisputeAutomation:
             else:
                 logger.warning(f"Invoice {invoice_number} não apareceu na página")
 
+            select_script = """
+            // Procura o select com aria-label
+            let select = document.querySelector('select[aria-label="Dispute reason"]');
+
+            // Se não encontrar, procura por id
+            if (!select) {
+                select = document.getElementById('select');
+            }
+
+            // Se não encontrar, procura em Shadow DOMs
+            if (!select) {
+                const allElements = document.querySelectorAll('*');
+                for (let el of allElements) {
+                    if (el.shadowRoot) {
+                        select = el.shadowRoot.querySelector('select[aria-label="Dispute reason"]');
+                        if (select) break;
+                    }
+                }
+            }
+
+            if (!select) return {success: false, error: 'Select não encontrado'};
+
+            // Seleciona o valor
+            select.value = arguments[0];
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            select.dispatchEvent(new Event('input', { bubbles: true }));
+
+            return {success: true, value: select.value};
+            """
+            self.driver.execute_script(select_script, "0001")
+
+            checkbox_script = """
+            const label = document.querySelector('label[for="00000001-checkbox"]');
+            if (label) {
+                label.click();
+                return {success: true};
+            }
+            return {success: false, error: 'Checkbox não encontrado'};
+            """
+
+            self.driver.execute_script(checkbox_script)
+
+            select_category_script = """
+            const category = arguments[0];
+
+            // Procura o select da dispute category
+            let select = document.querySelector('select[aria-label="Dispute category"]');
+
+            // Se não encontrar, procura em Shadow DOMs
+            if (!select) {
+                const allElements = document.querySelectorAll('*');
+                for (let el of allElements) {
+                    if (el.shadowRoot) {
+                        select = el.shadowRoot.querySelector('select[aria-label="Dispute category"]');
+                        if (select) break;
+                    }
+                }
+            }
+
+            if (!select) {
+                return {success: false, error: 'Select não encontrado'};
+            }
+
+            // Remove o disabled se necessário
+            if (select.disabled) {
+                select.disabled = false;
+            }
+
+            // Seleciona o valor
+            select.value = category;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            select.dispatchEvent(new Event('input', { bubbles: true }));
+
+            return {success: true, value: select.value};
+            """
+
+            # Valores disponíveis:
+            # "rateNotAsPerContractualAgreement" - Contractual rate not applied
+            # "containerRolledByCarrier" - Container rolled by carrier
+            # "agreedFreeTimeNotApplied" - Agreed free time not applied
+            # "chargeIncurredDueToDelayByCarrier" - Charged due to delay by carrier
+            # "others" - Others
+
+            result = self.driver.execute_script(select_category_script, "rateNotAsPerContractualAgreement")
+
+            logger.info("Preenchendo Expected Amount com valor padrão...")
+
+            fill_expected_amount_script = """
+            const billingItem = arguments[0];
+            const amount = arguments[1];
+
+            // 1. Busca diretamente pelo ID do mc-input
+            const mcInputId = billingItem + '-expectedAmount';
+            const mcInput = document.getElementById(mcInputId);
+
+            if (!mcInput) {
+                return {success: false, error: 'mc-input não encontrado com id: ' + mcInputId};
+            }
+
+            // 2. Remove disabled
+            mcInput.removeAttribute('disabled');
+
+            // 3. Acessa o Shadow DOM
+            if (!mcInput.shadowRoot) {
+                return {success: false, error: 'Shadow DOM não encontrado'};
+            }
+
+            // 4. Busca o input dentro do Shadow DOM
+            const input = mcInput.shadowRoot.querySelector('input[type="text"]');
+
+            if (!input) {
+                return {success: false, error: 'Input interno não encontrado'};
+            }
+
+            // 5. Remove todos os bloqueios
+            input.removeAttribute('disabled');
+            input.removeAttribute('readonly');
+            input.disabled = false;
+            input.readOnly = false;
+
+            // 6. Preenche o valor
+            input.value = amount;
+
+            // 7. Dispara eventos
+            input.dispatchEvent(new Event('focus', { bubbles: true }));
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            input.dispatchEvent(new Event('blur', { bubbles: true }));
+
+            // 8. Atualiza o input hidden também (por segurança)
+            const hiddenInput = document.querySelector('input[type="number"][name="' + mcInputId + '"][style*="display:none"]');
+            if (hiddenInput) {
+                hiddenInput.value = amount;
+            }
+
+            return {success: true, value: input.value, hiddenValue: hiddenInput ? hiddenInput.value : 'not found'};
+            """
+
+            result = self.driver.execute_script(fill_expected_amount_script, "00000001", "1500.00")
+
+            if not result.get('success'):
+                logger.error(f"Erro ao preencher Expected Amount: {result.get('error')}")
+                self.driver.save_screenshot("debug_erro_expected_amount.png")
+                return {"success": False, "error": result.get('error')}
+
+            logger.info("Preenchendo descrição da disputa...")
+
+            fill_description_script = """
+            const text = arguments[0];
+
+            // Busca o textarea por name
+            const textarea = document.querySelector('textarea[name="noteDescription"]');
+
+            if (!textarea) {
+                // Se não encontrar, procura em Shadow DOM
+                const mcTextarea = document.querySelector('mc-textarea[name="noteDescription"]');
+                if (mcTextarea && mcTextarea.shadowRoot) {
+                    const shadowTextarea = mcTextarea.shadowRoot.querySelector('textarea');
+                    if (shadowTextarea) {
+                        shadowTextarea.value = text;
+                        shadowTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                        shadowTextarea.dispatchEvent(new Event('change', { bubbles: true }));
+                        return {success: true, value: shadowTextarea.value};
+                    }
+                }
+                return {success: false, error: 'Textarea não encontrado'};
+            }
+
+            // Preenche o textarea
+            textarea.value = text;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.dispatchEvent(new Event('change', { bubbles: true }));
+
+            return {success: true, value: textarea.value};
+            """
+
+            result = self.driver.execute_script(fill_description_script, "TESTE")
+
+            if not result.get('success'):
+                logger.error(f"Erro ao preencher descrição: {result.get('error')}")
+                self.driver.save_screenshot("debug_erro_description.png")
+                return {"success": False, "error": result.get('error')}
+
+            logger.info(f"✓ Descrição preenchida: {result.get('value')}")
+            time.sleep(1)
+            logger.info("Preenchendo informações de contato...")
+
+            fill_contact_info_script = """
+            const name = arguments[0];
+            const email = arguments[1];
+            const phone = arguments[2];
+
+            function fillMcInput(mcInputId, value) {
+                const mcInput = document.getElementById(mcInputId);
+                if (!mcInput) {
+                    return {success: false, error: 'mc-input não encontrado: ' + mcInputId};
+                }
+
+                // Preenche via Shadow DOM
+                if (mcInput.shadowRoot) {
+                    const input = mcInput.shadowRoot.querySelector('input[type="text"]');
+                    if (input) {
+                        input.value = value;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                }
+
+                // Preenche também o input hidden
+                const hiddenInput = document.querySelector(`input[name="${mcInputId}"][style*="display:none"]`);
+                if (hiddenInput) {
+                    hiddenInput.value = value;
+                }
+
+                return {success: true};
+            }
+
+            // Preenche Name
+            let result = fillMcInput('contactPerson', name);
+            if (!result.success) return result;
+
+            // Preenche Email
+            result = fillMcInput('contactEmail', email);
+            if (!result.success) return result;
+
+            // Preenche Contact Number
+            result = fillMcInput('contactTelNumber', phone);
+            if (!result.success) return result;
+
+            return {
+                success: true, 
+                name: name,
+                email: email,
+                phone: phone
+            };
+            """
+
+            # Defina os valores aqui
+            contact_name = "Fernando"
+            contact_email = "fernando.conceicao@nitro.com.br"
+            contact_phone = "+55 11 99999-9999"  # Coloque o telefone aqui
+
+            result = self.driver.execute_script(
+                fill_contact_info_script,
+                contact_name,
+                contact_email,
+                contact_phone
+            )
+
+            if not result.get('success'):
+                logger.error(f"Erro ao preencher informações de contato: {result.get('error')}")
+                self.driver.save_screenshot("debug_erro_contact_info.png")
+                return {"success": False, "error": result.get('error')}
+
+            logger.info(f"✓ Informações de contato preenchidas:")
+            logger.info(f"  - Name: {result.get('name')}")
+            logger.info(f"  - Email: {result.get('email')}")
+            logger.info(f"  - Phone: {result.get('phone')}")
+            time.sleep(1)
+
             # Captura screenshot da página final
             self.driver.save_screenshot("debug_pagina_disputa.png")
             logger.info("Screenshot salvo: debug_pagina_disputa.png")
