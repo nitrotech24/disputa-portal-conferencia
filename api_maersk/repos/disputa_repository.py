@@ -16,6 +16,24 @@ def _conn():
 
 
 class DisputaRepository:
+    def get_outdated(self, customer_code: str) -> list:
+        """
+        Busca disputas desatualizadas (>2h, status nao final).
+        """
+        sql = """
+        SELECT d.dispute_number, d.status
+        FROM disputa d
+        JOIN invoice i ON d.invoice_id = i.id
+        WHERE i.armador = 'MAERSK'
+          AND i.customer_code = %s
+          AND d.updated_at < NOW() - INTERVAL 2 HOUR
+          AND d.status NOT IN ('Accepted - Invoice cancellation and rebill', 'REJECTED', 'CLOSED', 'CANCELLED')
+        """
+        with _conn() as conn:
+            cur = conn.cursor(dictionary=True)
+            cur.execute(sql, (customer_code,))
+            return cur.fetchall()
+
     def insert_or_update(
             self,
             invoice_id: int,
