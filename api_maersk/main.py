@@ -70,10 +70,10 @@ def atualizar_disputas_desatualizadas(customer_code: str, sync_service: DisputeS
     disputas = get_disputas_desatualizadas(customer_code)
 
     if not disputas:
-        logger.info("✅ Nenhuma disputa precisa ser atualizada")
+        logger.info("Nenhuma disputa precisa ser atualizada")
         return 0
 
-    logger.info(f"⚠️ Encontradas {len(disputas)} disputas para atualizar")
+    logger.info(f"Encontradas {len(disputas)} disputas para atualizar")
 
     atualizadas = 0
     erros = 0
@@ -89,17 +89,17 @@ def atualizar_disputas_desatualizadas(customer_code: str, sync_service: DisputeS
 
             if result.get('success'):
                 atualizadas += 1
-                logger.info(f"    ✅ Atualizada: {result.get('status')}")
+                logger.info(f"    Atualizada: {result.get('status')}")
             else:
                 erros += 1
-                logger.warning(f"    ⚠️ Erro: {result.get('error')}")
+                logger.warning(f"    Erro: {result.get('error')}")
 
             # Rate limit
             time.sleep(0.5)
 
         except Exception as e:
             erros += 1
-            logger.error(f"    ❌ Erro ao atualizar {dispute_id}: {e}")
+            logger.error(f"    Erro ao atualizar {dispute_id}: {e}")
 
     logger.info(f"Resultado: {atualizadas} atualizadas, {erros} erros")
     return atualizadas
@@ -117,7 +117,7 @@ def importar_invoices_faltantes(customer_code: str, dispute_service: DisputeServ
         stats = fetch_and_insert_missing_invoices(customer_code, missing_invoices)
         return stats.get('inseridas_banco', 0)
     else:
-        logger.info("✅ Nenhuma invoice faltante")
+        logger.info("Nenhuma invoice faltante")
         return 0
 
 
@@ -173,7 +173,7 @@ def main():
             total_invoices_importadas += invoices_importadas
 
             if invoices_importadas > 0:
-                logger.info(f"✅ {invoices_importadas} invoices importadas")
+                logger.info(f"{invoices_importadas} invoices importadas")
 
             # Passo 2: Sincronizar disputas
             logger.info(f"[2/3] Sincronizando disputas...")
@@ -195,7 +195,7 @@ def main():
 
             # Pausa entre clientes
             if idx < len(clientes):
-                logger.info(f"\n⏸️ Pausa de 5s antes do próximo cliente...\n")
+                logger.info(f"\nPausa de 5s antes do proximo cliente...\n")
                 time.sleep(5)
 
         except Exception as e:

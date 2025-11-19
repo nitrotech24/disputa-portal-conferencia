@@ -90,11 +90,11 @@ def insert_invoice_into_db(invoice_data: dict) -> bool:
             ))
             conn.commit()
             logger.info(
-                f"✅ Invoice {invoice_data['numero_invoice']} inserida no banco ({invoice_data['customer_code']})")
+                f"Invoice {invoice_data['numero_invoice']} inserida no banco ({invoice_data['customer_code']})")
             return True
 
     except Exception as e:
-        logger.error(f"❌ Erro ao inserir invoice {invoice_data.get('numero_invoice')}: {e}")
+        logger.error(f"Erro ao inserir invoice {invoice_data.get('numero_invoice')}: {e}")
         return False
 
 
@@ -128,7 +128,7 @@ def fetch_and_insert_missing_invoices(customer_code: str, invoice_numbers: list)
         "erros_busca": 0
     }
 
-    logger.info(f"\n📋 Total de invoices para processar: {len(invoice_numbers)}")
+    logger.info(f"\nTotal de invoices para processar: {len(invoice_numbers)}")
     logger.info("=" * 80)
 
     # Processar cada invoice
@@ -157,7 +157,7 @@ def fetch_and_insert_missing_invoices(customer_code: str, invoice_numbers: list)
                 stats["encontradas_api"] += 1
 
                 # DEBUG: Ver todos os campos disponíveis
-                logger.info(f"   Campos disponíveis: {list(invoice.keys())[:20]}")
+                logger.info(f"   Campos disponiveis: {list(invoice.keys())[:20]}")
 
                 # Converter data
                 raw_date = invoice.get("invoiceDate")
@@ -178,42 +178,42 @@ def fetch_and_insert_missing_invoices(customer_code: str, invoice_numbers: list)
                     "status": invoice.get("invoiceStatus") or invoice.get("status", "PAID")
                 }
 
-                logger.info(f"   API ✅ - Valor: {invoice_to_insert['moeda']} {invoice_to_insert['valor']}")
+                logger.info(f"   API - Valor: {invoice_to_insert['moeda']} {invoice_to_insert['valor']}")
 
                 # 3. Inserir no banco
                 if insert_invoice_into_db(invoice_to_insert):
                     stats["inseridas_banco"] += 1
-                    logger.info(f"   BD ✅ - Invoice inserida com sucesso!")
+                    logger.info(f"   BD - Invoice inserida com sucesso!")
                 else:
                     stats["erros_insercao"] += 1
-                    logger.warning(f"   BD ⚠️  - Erro ao inserir no banco")
+                    logger.warning(f"   BD - Erro ao inserir no banco")
 
             else:
                 stats["nao_encontradas_api"] += 1
-                logger.warning(f"   API ⚠️  - Invoice não encontrada")
+                logger.warning(f"   API - Invoice nao encontrada")
 
             # Delay para não sobrecarregar API
             if idx % 10 == 0:
-                logger.info(f"\n⏸️  Pausa de 2s (processadas {idx}/{len(invoice_numbers)})...")
+                logger.info(f"\nPausa de 2s (processadas {idx}/{len(invoice_numbers)})...")
                 time.sleep(2)
             else:
                 time.sleep(0.5)
 
         except Exception as e:
             stats["erros_busca"] += 1
-            logger.error(f"❌ Erro ao processar invoice {invoice_num}: {e}")
+            logger.error(f"Erro ao processar invoice {invoice_num}: {e}")
             continue
 
     # Relatório final
     logger.info("\n" + "=" * 80)
-    logger.info("RELATÓRIO FINAL")
+    logger.info("RELATORIO FINAL")
     logger.info("=" * 80)
-    logger.info(f"📊 Total processadas: {stats['total_solicitadas']}")
-    logger.info(f"🔍 Encontradas na API: {stats['encontradas_api']}")
-    logger.info(f"💾 Inseridas no banco: {stats['inseridas_banco']}")
-    logger.info(f"⚠️  Não encontradas na API: {stats['nao_encontradas_api']}")
-    logger.info(f"❌ Erros de inserção: {stats['erros_insercao']}")
-    logger.info(f"❌ Erros de busca: {stats['erros_busca']}")
+    logger.info(f"Total processadas: {stats['total_solicitadas']}")
+    logger.info(f"Encontradas na API: {stats['encontradas_api']}")
+    logger.info(f"Inseridas no banco: {stats['inseridas_banco']}")
+    logger.info(f"Nao encontradas na API: {stats['nao_encontradas_api']}")
+    logger.info(f"Erros de insercao: {stats['erros_insercao']}")
+    logger.info(f"Erros de busca: {stats['erros_busca']}")
     logger.info("=" * 80)
 
     return stats
@@ -236,13 +236,13 @@ def get_missing_invoices_from_disputes(customer_code: str) -> list:
     # 1. Buscar todas as disputas da API
     logger.info("\n[1] Buscando disputas da API...")
     all_disputes = dispute_service.list_all_disputes(customer_code)
-    logger.info(f"✅ {len(all_disputes)} disputas encontradas na API")
+    logger.info(f"{len(all_disputes)} disputas encontradas na API")
 
     # 2. Buscar todas as invoices do banco
     logger.info("\n[2] Buscando invoices do banco...")
     all_invoices = invoice_repo.fetch_invoices_maersk(limit=100000)
     invoice_numbers_in_db = {inv["numero_invoice"] for inv in all_invoices}
-    logger.info(f"✅ {len(invoice_numbers_in_db)} invoices MAERSK no banco")
+    logger.info(f"{len(invoice_numbers_in_db)} invoices MAERSK no banco")
 
     # 3. Identificar invoices faltantes
     logger.info("\n[3] Identificando invoices faltantes...")
@@ -255,7 +255,7 @@ def get_missing_invoices_from_disputes(customer_code: str) -> list:
     # Remover duplicatas
     missing_invoices = list(set(missing_invoices))
 
-    logger.info(f"⚠️  {len(missing_invoices)} invoices faltantes identificadas")
+    logger.info(f"{len(missing_invoices)} invoices faltantes identificadas")
     logger.info("=" * 80)
 
     return missing_invoices
@@ -283,12 +283,12 @@ def main():
     missing_invoices = get_missing_invoices_from_disputes(customer_code)
 
     if not missing_invoices:
-        logger.info("\n✅ Nenhuma invoice faltante! Todas as disputas têm invoice no banco.")
+        logger.info("\nNenhuma invoice faltante! Todas as disputas tem invoice no banco.")
         return
 
     # Confirmação
-    logger.info(f"\n⚠️  Serão processadas {len(missing_invoices)} invoices")
-    logger.info(f"⏱️  Tempo estimado: ~{int(len(missing_invoices) * 0.7 / 60)} minutos")
+    logger.info(f"\nSerao processadas {len(missing_invoices)} invoices")
+    logger.info(f"Tempo estimado: ~{int(len(missing_invoices) * 0.7 / 60)} minutos")
     logger.info("\nIniciando em 3 segundos... (Ctrl+C para cancelar)")
     time.sleep(3)
 
@@ -297,15 +297,15 @@ def main():
 
     # Resultado final
     logger.info("\n" + "=" * 80)
-    logger.info("PROCESSO CONCLUÍDO!")
+    logger.info("PROCESSO CONCLUIDO!")
     logger.info("=" * 80)
 
     if stats["inseridas_banco"] > 0:
-        logger.info(f"\n✅ {stats['inseridas_banco']} invoices importadas com sucesso!")
-        logger.info("\n💡 Próximo passo: Execute 'py tests/sync_all_disputes_full.py'")
+        logger.info(f"\n{stats['inseridas_banco']} invoices importadas com sucesso!")
+        logger.info("\nProximo passo: Execute 'py tests/sync_all_disputes_full.py'")
         logger.info("   para sincronizar as disputas dessas novas invoices")
     else:
-        logger.warning("\n⚠️  Nenhuma invoice foi inserida no banco")
+        logger.warning("\nNenhuma invoice foi inserida no banco")
 
     logger.info("=" * 80)
 

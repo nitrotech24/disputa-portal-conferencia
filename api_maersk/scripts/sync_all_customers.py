@@ -40,9 +40,9 @@ def sync_single_customer(customer_code: str, customer_name: str):
     if missing_invoices:
         logger.info(f"Encontradas {len(missing_invoices)} invoices faltantes")
         stats_import = fetch_and_insert_missing_invoices(customer_code, missing_invoices)
-        logger.info(f"✅ Importadas: {stats_import['inseridas_banco']} invoices")
+        logger.info(f"Importadas: {stats_import['inseridas_banco']} invoices")
     else:
-        logger.info("✅ Nenhuma invoice faltante")
+        logger.info("Nenhuma invoice faltante")
 
     # Sincronizar disputas
     logger.info(f"\n[2] Sincronizando disputas...")
@@ -75,11 +75,11 @@ def sync_all_customers():
         logger.error("Nenhum cliente encontrado no arquivo de tokens!")
         return
 
-    logger.info(f"\n📋 Total de clientes: {len(all_customers)}")
+    logger.info(f"\nTotal de clientes: {len(all_customers)}")
     for code, data in all_customers.items():
         logger.info(f"  - {data.get('name', 'Unknown')[:50]} ({code})")
 
-    logger.info("\n⏱️  Tempo estimado total: ~{} minutos".format(len(all_customers) * 5))
+    logger.info("\nTempo estimado total: ~{} minutos".format(len(all_customers) * 5))
     logger.info("\nIniciando em 5 segundos... (Ctrl+C para cancelar)\n")
     time.sleep(5)
 
@@ -108,29 +108,29 @@ def sync_all_customers():
 
             # Pausa entre clientes para não sobrecarregar API
             if idx < len(all_customers):
-                logger.info(f"\n⏸️  Pausa de 10s antes do próximo cliente...\n")
+                logger.info(f"\nPausa de 10s antes do proximo cliente...\n")
                 time.sleep(10)
 
         except Exception as e:
-            logger.error(f"❌ Erro ao processar {customer_name}: {e}")
+            logger.error(f"Erro ao processar {customer_name}: {e}")
             global_stats["clientes_com_erro"].append(customer_name)
             continue
 
     # Relatório final global
     logger.info("\n" + "=" * 80)
-    logger.info("RELATÓRIO FINAL GLOBAL")
+    logger.info("RELATORIO FINAL GLOBAL")
     logger.info("=" * 80)
-    logger.info(f"📊 Total de clientes: {global_stats['total_clientes']}")
-    logger.info(f"✅ Clientes processados: {global_stats['clientes_processados']}")
-    logger.info(f"💾 Total de disputas sincronizadas: {global_stats['total_disputas']}")
+    logger.info(f"Total de clientes: {global_stats['total_clientes']}")
+    logger.info(f"Clientes processados: {global_stats['clientes_processados']}")
+    logger.info(f"Total de disputas sincronizadas: {global_stats['total_disputas']}")
 
     if global_stats["clientes_com_erro"]:
-        logger.warning(f"\n⚠️  Clientes com erro ({len(global_stats['clientes_com_erro'])}):")
+        logger.warning(f"\nClientes com erro ({len(global_stats['clientes_com_erro'])}):")
         for cliente in global_stats["clientes_com_erro"]:
             logger.warning(f"  - {cliente}")
 
     logger.info("\n" + "=" * 80)
-    logger.info("✅ SINCRONIZAÇÃO COMPLETA!")
+    logger.info("SINCRONIZACAO COMPLETA!")
     logger.info("=" * 80)
 
 

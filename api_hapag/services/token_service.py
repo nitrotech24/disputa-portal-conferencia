@@ -42,19 +42,19 @@ def get_valid_token() -> str | None:
     if token:
         logging.info("Token carregado do arquivo. Testando...")
         if test_token(token):
-            logging.info("Token ainda válido ✅")
+            logging.info("Token ainda valido")
             return token
         else:
-            logging.warning("Token expirado ❌, gerando novo...")
+            logging.warning("Token expirado, gerando novo...")
 
     # Se não tinha ou expirou → gera novo
     new_token = login_and_get_token()
     if new_token:
         save_token(new_token)
-        logging.info("Novo token salvo em xtoken.txt ✅")
+        logging.info("Novo token salvo em xtoken.txt")
         return new_token
 
-    logging.error("Não foi possível obter token válido")
+    logging.error("Nao foi possivel obter token valido")
     return None
 
 if __name__ == '__main__':

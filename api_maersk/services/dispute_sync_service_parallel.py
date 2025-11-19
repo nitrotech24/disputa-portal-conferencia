@@ -42,7 +42,7 @@ class DisputeSyncServiceParallel:
                 dispute = dispute_map[numero_invoice]
                 dispute_id = dispute.get("ohpDisputeId")
 
-                logger.info(f"✅ Invoice {numero_invoice} tem disputa {dispute_id} (Cliente: {customer_code})")
+                logger.info(f"Invoice {numero_invoice} tem disputa {dispute_id} (Cliente: {customer_code})")
 
                 # BUSCAR DETALHES COMPLETOS DA DISPUTA
                 dispute_details = self.dispute_service.get_dispute_details(dispute_id, customer_code)
@@ -112,14 +112,14 @@ class DisputeSyncServiceParallel:
                     result["dispute_id"] = dispute_id
                     result["status"] = status
                 else:
-                    logger.warning(f"⚠️ Não conseguiu buscar detalhes da disputa {dispute_id}")
+                    logger.warning(f"Nao conseguiu buscar detalhes da disputa {dispute_id}")
                     result["error"] = "Failed to get dispute details"
             else:
-                logger.info(f"ℹ️  Invoice {numero_invoice} sem disputa no cliente {customer_code}")
+                logger.info(f"Invoice {numero_invoice} sem disputa no cliente {customer_code}")
                 result["success"] = True
 
         except Exception as e:
-            logger.error(f"❌ Erro ao processar invoice {numero_invoice}: {e}")
+            logger.error(f"Erro ao processar invoice {numero_invoice}: {e}")
             result["error"] = str(e)
 
         return result
@@ -128,18 +128,18 @@ class DisputeSyncServiceParallel:
         """
         Sincroniza disputas EM PARALELO.
         """
-        logger.info(f"🚀 Iniciando sincronização PARALELA de disputas para {customer_code}")
-        logger.info(f"⚙️  Usando {self.max_workers} threads simultâneas")
+        logger.info(f"Iniciando sincronizacao PARALELA de disputas para {customer_code}")
+        logger.info(f"Usando {self.max_workers} threads simultaneas")
 
         # 1. Buscar TODAS as disputas da API
-        logger.info("📡 Buscando todas as disputas da API...")
+        logger.info("Buscando todas as disputas da API...")
         all_disputes = self.dispute_service.list_all_disputes(customer_code)
 
         if not all_disputes:
-            logger.warning("⚠️  Nenhuma disputa encontrada na API")
+            logger.warning("Nenhuma disputa encontrada na API")
             return {"erro": "Nenhuma disputa na API"}
 
-        logger.info(f"✅ Encontradas {len(all_disputes)} disputas na API")
+        logger.info(f"Encontradas {len(all_disputes)} disputas na API")
 
         # 2. Criar mapa: invoiceNumber -> dispute
         dispute_map = {}
@@ -148,14 +148,14 @@ class DisputeSyncServiceParallel:
             if invoice_num:
                 dispute_map[invoice_num] = dispute
 
-        logger.info(f"🗺️  Mapa criado com {len(dispute_map)} invoices únicas")
+        logger.info(f"Mapa criado com {len(dispute_map)} invoices unicas")
 
         # 3. Buscar invoices MAERSK do banco
         invoices = self.invoice_repo.fetch_invoices_by_customer(customer_code, limit=limit)
-        logger.info(f"🗄️  Encontradas {len(invoices)} invoices no banco")
+        logger.info(f"Encontradas {len(invoices)} invoices no banco")
 
         if not invoices:
-            logger.warning("⚠️  Nenhuma invoice encontrada no banco")
+            logger.warning("Nenhuma invoice encontrada no banco")
             return {"erro": "Nenhuma invoice no banco"}
 
         stats = {
@@ -167,7 +167,7 @@ class DisputeSyncServiceParallel:
         }
 
         # 4. PROCESSAR EM PARALELO
-        logger.info(f"🚀 Processando {len(invoices)} invoices em paralelo...")
+        logger.info(f"Processando {len(invoices)} invoices em paralelo...")
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # Submeter todas as tarefas
@@ -192,17 +192,17 @@ class DisputeSyncServiceParallel:
                         stats["sem_disputa"] += 1
                 else:
                     stats["erros"] += 1
-                    logger.error(f"❌ Erro: {result['error']}")
+                    logger.error(f"Erro: {result['error']}")
 
         # Retornar status
         logger.info("=" * 80)
-        logger.info("✅ SINCRONIZAÇÃO PARALELA CONCLUÍDA")
+        logger.info("SINCRONIZACAO PARALELA CONCLUIDA")
         logger.info("=" * 80)
-        logger.info(f"📊 Total de invoices: {stats['total_invoices']}")
-        logger.info(f"✅ Com disputa: {stats['com_disputa']}")
-        logger.info(f"ℹ️  Sem disputa: {stats['sem_disputa']}")
-        logger.info(f"💾 Disputas salvas: {stats['disputas_salvas']}")
-        logger.info(f"❌ Erros: {stats['erros']}")
+        logger.info(f"Total de invoices: {stats['total_invoices']}")
+        logger.info(f"Com disputa: {stats['com_disputa']}")
+        logger.info(f"Sem disputa: {stats['sem_disputa']}")
+        logger.info(f"Disputas salvas: {stats['disputas_salvas']}")
+        logger.info(f"Erros: {stats['erros']}")
         logger.info("=" * 80)
 
         return stats

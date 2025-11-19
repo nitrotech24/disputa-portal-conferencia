@@ -344,7 +344,7 @@ def enviar_disputa_hapag(
         data = r.json()
         dispute_number = data.get('disputeNumber')
 
-        logging.info(f"✅ Disputa {dispute_number} enviada com sucesso")
+        logging.info(f"Disputa {dispute_number} enviada com sucesso")
 
         # Salva no banco
         try:
@@ -362,7 +362,7 @@ def enviar_disputa_hapag(
                         'disputeCreated': None
                     }
                 )
-                logging.info(f"✅ Disputa salva no banco (id={disputa_id})")
+                logging.info(f"Disputa salva no banco (id={disputa_id})")
         except Exception as e:
             logging.error(f"Erro ao salvar no banco: {e}")
 
@@ -373,11 +373,11 @@ def enviar_disputa_hapag(
         }
 
     elif r.status_code == 400:
-        logging.error(f"❌ Dados inválidos (400): {r.text}")
+        logging.error(f"Dados invalidos (400): {r.text}")
         return None
     elif r.status_code == 409:
-        logging.warning(f"⚠️ Disputa já existe (409): {r.text}")
+        logging.warning(f"Disputa ja existe (409): {r.text}")
         return None
     else:
-        logging.error(f"❌ Erro {r.status_code}: {r.text}")
+        logging.error(f"Erro {r.status_code}: {r.text}")
         return None
