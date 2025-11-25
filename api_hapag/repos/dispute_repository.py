@@ -15,7 +15,6 @@ class Disputa:
     dispute_reason: Optional[str] = None
     disputed_amount: Optional[float] = None
     currency: Optional[str] = None
-    ref_email: Optional[str] = None
     allow_second_review: Optional[bool] = None
     api_created_date: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -36,9 +35,9 @@ def get_disputas_para_atualizar() -> List[Disputa]:
     duas_horas_atras = datetime.now() - timedelta(hours=2)
 
     sql = """
-        SELECT d.id, d.invoice_id, d.dispute_number, d.status, 
+        SELECT d.id, d.invoice_id, d.dispute_number, d.status,
                d.dispute_reason, d.disputed_amount, d.currency,
-               d.ref_email, d.allow_second_review, 
+               d.allow_second_review,
                d.api_created_date, d.updated_at
         FROM disputa d
         JOIN invoice i ON d.invoice_id = i.id
@@ -117,9 +116,9 @@ def upsert_disputa(invoice_id: int, dispute_number: int, data: dict) -> int:
     sql_insert = """
         INSERT INTO disputa (
             invoice_id, dispute_number, status, dispute_reason,
-            disputed_amount, currency, ref_email, allow_second_review,
+            disputed_amount, currency, allow_second_review,
             api_created_date
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     sql_update = """
@@ -128,7 +127,6 @@ def upsert_disputa(invoice_id: int, dispute_number: int, data: dict) -> int:
             dispute_reason = %s,
             disputed_amount = %s,
             currency = %s,
-            ref_email = %s,
             allow_second_review = %s,
             api_created_date = %s,
             updated_at = CURRENT_TIMESTAMP
@@ -147,7 +145,6 @@ def upsert_disputa(invoice_id: int, dispute_number: int, data: dict) -> int:
                 data.get('dispute_reason'),
                 data.get('amount'),
                 data.get('currency'),
-                data.get('ref'),
                 data.get('allowSecondReview'),
                 data.get('disputeCreated'),
                 row["id"]
@@ -163,7 +160,6 @@ def upsert_disputa(invoice_id: int, dispute_number: int, data: dict) -> int:
             data.get('dispute_reason'),
             data.get('amount'),
             data.get('currency'),
-            data.get('ref'),
             data.get('allowSecondReview'),
             data.get('disputeCreated')
         ))
@@ -183,7 +179,6 @@ def update_disputa_completa(disputa_id: int, data: dict) -> None:
             dispute_reason = %s,
             disputed_amount = %s,
             currency = %s,
-            ref_email = %s,
             allow_second_review = %s,
             api_created_date = %s,
             updated_at = CURRENT_TIMESTAMP
@@ -196,7 +191,6 @@ def update_disputa_completa(disputa_id: int, data: dict) -> None:
             data.get('dispute_reason'),
             data.get('amount'),
             data.get('currency'),
-            data.get('ref'),
             data.get('allowSecondReview'),
             data.get('disputeCreated'),
             disputa_id
