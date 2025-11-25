@@ -1,10 +1,11 @@
 """
 Automação de criação de disputas no portal Maersk.
-Navegação direta via URL
+Suporta criação via API (create_dispute_api) e via Selenium (create_dispute).
 """
 
 import time
-from typing import Dict
+import requests
+from typing import Dict, Optional, List
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -16,9 +17,13 @@ from api_maersk.config.settings import (
     MAERSK_PASSWORD,
     MAERSK_BASE_URL,
     SELENIUM_TIMEOUT,
-    PAGE_LOAD_WAIT
+    PAGE_LOAD_WAIT,
+    API_BASE_URL,
+    CONSUMER_KEY,
+    CARRIER_CODE
 )
 from api_maersk.services.token_service import TokenService
+from api_maersk.services.auth_service import AuthService
 from api_maersk.utils.logger import setup_logger
 from selenium.webdriver.common.keys import Keys
 
@@ -28,8 +33,9 @@ logger = setup_logger(__name__)
 class MaerskDisputeAutomation:
     """Automação para criação de disputas no portal Maersk."""
 
-    def __init__(self, token_service: TokenService):
+    def __init__(self, token_service: TokenService, auth_service: Optional[AuthService] = None):
         self.token_service = token_service
+        self.auth_service = auth_service
         self.driver = None
 
     def _setup_driver(self) -> webdriver.Chrome:
@@ -98,6 +104,309 @@ class MaerskDisputeAutomation:
         else:
             logger.warning("Customer não encontrado")
             return False
+
+    def create_dispute_api(
+        self,
+        customer_code: str,
+        invoice_number: str,
+        dispute_reason_code: str = "0001",
+        dispute_reason_description: str = "Incorrect rates",
+        note_description: str = "Disputa criada via automação",
+        contact_name: str = "Fernando",
+        contact_email: str = "fernando.conceicao@nitro.com.br",
+        contact_phone: str = "5511999999999",
+        charges: Optional[List[Dict]] = None,
+        dry_run: bool = True
+    ) -> Dict:
+        """
+        Cria uma disputa via API Maersk.
+
+        Args:
+            customer_code: Código do cliente (ex: '305S3073SPA')
+            invoice_number: Número da invoice
+            dispute_reason_code: Código do motivo (padrão: '0001' = Incorrect rates)
+            dispute_reason_description: Descrição do motivo
+            note_description: Descrição detalhada da disputa
+            contact_name: Nome do contato
+            contact_email: Email do contato
+            contact_phone: Telefone do contato
+            charges: Lista de charges a disputar. Se None, busca automaticamente da invoice
+            dry_run: Se True, não envia a requisição (apenas prepara e valida)
+
+        Returns:
+            Dict com resultado da operação:
+            {
+                "success": bool,
+                "message": str,
+                "dispute_id": str (se sucesso),
+                "payload": dict (payload enviado)
+            }
+        """
+        logger.info("=" * 60)
+        logger.info("CRIACAO DE DISPUTA VIA API")
+        logger.info("=" * 60)
+        logger.info(f"Customer: {customer_code}")
+        logger.info(f"Invoice: {invoice_number}")
+        logger.info(f"Dry Run: {dry_run}")
+
+        # 1. Obter API customer code e token válido
+        api_code = self.token_service.get_api_customer_code(customer_code)
+        token = self.token_service.get_valid_token(customer_code, auth_service=self.auth_service)
+
+        if not token:
+            return {
+                "success": False,
+                "error": "Não foi possível obter token válido",
+                "message": "Execute o auth_service para renovar o token"
+            }
+
+        logger.info(f"API Customer Code: {api_code}")
+        logger.info(f"Token válido obtido")
+
+        # 2. Se charges não fornecidos, buscar da invoice
+        if not charges:
+            logger.info("Buscando charges da invoice...")
+            charges = self._get_invoice_charges(invoice_number, customer_code, token, api_code)
+
+            if not charges:
+                return {
+                    "success": False,
+                    "error": "Não foi possível obter charges da invoice",
+                    "message": "Verifique se a invoice existe e tem charges disponíveis"
+                }
+
+        logger.info(f"Total de charges a disputar: {len(charges)}")
+
+        # 3. Montar payload
+        payload = self._build_dispute_payload(
+            invoice_number=invoice_number,
+            api_customer_code=api_code,
+            charges=charges,
+            reason_code=dispute_reason_code,
+            reason_description=dispute_reason_description,
+            note_description=note_description,
+            contact_name=contact_name,
+            contact_email=contact_email,
+            contact_phone=contact_phone
+        )
+
+        logger.info(f"Payload montado: {len(str(payload))} caracteres")
+
+        # 4. Se dry_run, retorna sem enviar
+        if dry_run:
+            logger.warning("DRY RUN MODE - Requisicao NAO sera enviada!")
+            logger.info("Payload que seria enviado:")
+            import json
+            logger.info(json.dumps(payload, indent=2, ensure_ascii=False))
+
+            return {
+                "success": True,
+                "message": "Dry run completado. Payload preparado mas não enviado.",
+                "payload": payload,
+                "dry_run": True
+            }
+
+        # 5. Enviar requisição
+        logger.warning("ENVIANDO REQUISICAO REAL PARA CRIAR DISPUTA!")
+
+        url = f"{API_BASE_URL}/disputes-external/api/dispute"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Consumer-Key": CONSUMER_KEY,
+            "customer-code": api_code,
+            "carrier-code": CARRIER_CODE.lower(),
+            "Content-Type": "application/json",
+            "Origin": "https://www.maersk.com",
+            "Referer": "https://www.maersk.com/",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+            )
+        }
+
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            logger.info(f"POST {url} - Status: {response.status_code}")
+
+            if response.status_code == 200 or response.status_code == 201:
+                data = response.json()
+                dispute_id = data.get("ohpDisputeId") or data.get("disputeId")
+
+                logger.info(f"Disputa criada com sucesso! ID: {dispute_id}")
+
+                return {
+                    "success": True,
+                    "message": "Disputa criada com sucesso via API",
+                    "dispute_id": dispute_id,
+                    "response": data,
+                    "payload": payload
+                }
+            else:
+                logger.error(f"Erro {response.status_code}: {response.text}")
+
+                return {
+                    "success": False,
+                    "error": f"HTTP {response.status_code}",
+                    "message": response.text[:500],
+                    "payload": payload
+                }
+
+        except Exception as e:
+            logger.exception("Erro ao enviar requisição")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Exceção durante envio da requisição",
+                "payload": payload
+            }
+
+    def _get_invoice_charges(
+        self,
+        invoice_number: str,
+        customer_code: str,
+        token: str,
+        api_code: str
+    ) -> Optional[List[Dict]]:
+        """
+        Busca os charges de uma invoice para criar a disputa.
+
+        Returns:
+            Lista de dicts com informações dos charges, ou None se erro.
+        """
+        url = f"{API_BASE_URL}/invoices"
+
+        params = {
+            "searchType": "INV_NOS",
+            "ids": invoice_number,
+            "customerCodeCMD": api_code,
+            "carrierCode": CARRIER_CODE,
+            "invoiceType": "OPEN",
+            "isSelected": "true",
+            "isCreditCountry": "true"
+        }
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "consumer-key": "SqsiObucFhI8PTFlsakGygUALAVLQ0yT",  # Consumer key específico para /invoices
+            "accept": "*/*",
+            "Origin": "https://www.maersk.com",
+            "Referer": "https://www.maersk.com/",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+            )
+        }
+
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=30)
+            logger.info(f"GET /invoices - Status: {response.status_code}")
+
+            if response.status_code != 200:
+                logger.error(f"Erro ao buscar invoice: {response.text[:200]}")
+                return None
+
+            data = response.json()
+            invoices = data.get("invoices", [])
+
+            if not invoices:
+                logger.error(f"Invoice {invoice_number} não encontrada")
+                return None
+
+            invoice = invoices[0]
+
+            # Extrair charges da invoice
+            charges_list = []
+
+            for charge in invoice.get("charges", []):
+                charge_info = {
+                    "billing_item_no": charge.get("billingItemNumber", "00000001"),
+                    "charge_name": charge.get("chargeCode", "Unknown Charge"),
+                    "current_amount": str(charge.get("chargeAmount", 0)),
+                    "currency": charge.get("chargeCurrency", "USD"),
+                    "expected_amount": "0",  # Valor esperado (usuário deve informar)
+                    "dispute_category": "rateNotAsPerContractualAgreement"  # Categoria padrão
+                }
+                charges_list.append(charge_info)
+
+            logger.info(f"Encontrados {len(charges_list)} charges na invoice")
+            return charges_list
+
+        except Exception as e:
+            logger.error(f"Erro ao buscar charges: {e}")
+            return None
+
+    def _build_dispute_payload(
+        self,
+        invoice_number: str,
+        api_customer_code: str,
+        charges: List[Dict],
+        reason_code: str,
+        reason_description: str,
+        note_description: str,
+        contact_name: str,
+        contact_email: str,
+        contact_phone: str
+    ) -> Dict:
+        """
+        Monta o payload para criação de disputa conforme formato da API Maersk.
+
+        Args:
+            invoice_number: Número da invoice
+            api_customer_code: Código do customer na API (ex: BRS3073SPA)
+            charges: Lista de charges a disputar
+            reason_code: Código do motivo (ex: '0001')
+            reason_description: Descrição do motivo
+            note_description: Nota da disputa
+            contact_name: Nome do contato
+            contact_email: Email do contato
+            contact_phone: Telefone do contato
+
+        Returns:
+            Dict com payload formatado para a API
+        """
+        # Montar disputed_charge_details
+        disputed_charge_details = {}
+        total_disputed_amount = 0
+
+        for idx, charge in enumerate(charges, start=1):
+            billing_item = charge.get("billing_item_no", f"{idx:08d}")
+            current_amount = float(charge.get("current_amount", 0))
+            expected_amount = float(charge.get("expected_amount", 0))
+            disputed_amount = current_amount - expected_amount
+
+            disputed_charge_details[billing_item] = {
+                "chargeName": charge.get("charge_name", "Unknown Charge"),
+                "disputeCategory": {
+                    "label": "Contractual rate not applied",
+                    "value": charge.get("dispute_category", "rateNotAsPerContractualAgreement")
+                },
+                "currentAmount": f"{current_amount:.4f}",
+                "currency": charge.get("currency", "USD"),
+                "billingItemNo": billing_item,
+                "roeGcssToDoc": charge.get("roe_gcss_to_doc", 1),
+                "roeSource": charge.get("roe_source", "SAP"),
+                "expectedAmount": str(expected_amount),
+                "disputedAmount": disputed_amount
+            }
+
+            total_disputed_amount += disputed_amount
+
+        # Montar payload completo
+        payload = {
+            "invoiceNumber": invoice_number,
+            "disputedChargeDetails": disputed_charge_details,
+            "customer": api_customer_code,
+            "eInvoiceNo": "",
+            "reasonCode": reason_code,
+            "reasonDescription": reason_description,
+            "noteDescription": note_description,
+            "contactPerson": contact_name,
+            "contactEmail": contact_email,
+            "contactTelNumber": contact_phone,
+            "disputedAmount": total_disputed_amount
+        }
+
+        return payload
 
     def create_dispute(self, customer_code, invoice_number, **kwargs) -> Dict:
         logger.info("=" * 80)
